@@ -13,6 +13,9 @@ Application HTML/CSS/JavaScript destinée à GitHub Pages, avec authentification
 - téléchargement temporaire par URL signée ;
 - validation ou refus avec motif par le secrétariat ;
 - messagerie entre les apprenants et les comptes administrateurs ;
+- conversation privée entre chaque élève et le compte support ;
+- annonces administratives en lecture seule pour les élèves ;
+- tableau d'avancement des dossiers actualisé en temps réel ;
 - affichage adapté au téléphone et à l'ordinateur.
 
 Le site ne contient aucun apprenant, document ou message prérempli.
@@ -50,14 +53,20 @@ La clé publique est conçue pour être visible dans un navigateur. Ne placez ja
 
 ```sql
 update public.profiles
-set role = 'admin'
+set role = 'admin', formation = null, is_support = true
 where id = (
   select id from auth.users
-  where email = 'votre-adresse@exemple.fr'
+  where email = 'tbsngroupe@gmail.com'
 );
 ```
 
 Déconnectez-vous puis reconnectez-vous. La rubrique **Secrétariat** apparaîtra. Vous pourrez créer les premières demandes de documents.
+
+## Mise à niveau d'une installation existante
+
+Après chaque évolution du portail, vous pouvez réexécuter l'intégralité de `supabase-schema.sql`. Le script conserve les comptes et les documents existants, ajoute les éléments manquants et configure `tbsngroupe@gmail.com` comme compte administrateur support.
+
+Cette mise à niveau ajoute notamment les annonces et les mises à jour en temps réel. Elle doit être exécutée avant de publier les nouveaux fichiers HTML et JavaScript.
 
 ## 4. Publier sur GitHub Pages
 

@@ -9,6 +9,11 @@
   var profile = null;
   var documentTypes = [];
   var submissions = [];
+  var adminSubmissions = [];
+  var adminStudents = [];
+  var allMessages = [];
+  var announcements = [];
+  var liveChannel = null;
   var currentFilter = "all";
   var toastTimer;
 
@@ -80,6 +85,10 @@
   }
 
   function showAuth() {
+    if (client && liveChannel) {
+      client.removeChannel(liveChannel);
+      liveChannel = null;
+    }
     $("#setup-screen").hidden = true;
     $("#app").hidden = true;
     $("#auth-screen").hidden = false;
@@ -113,9 +122,12 @@
     $("#auth-screen").hidden = true;
     $("#app").hidden = false;
     fillIdentity();
-    await Promise.all([loadDocuments(), loadMessages()]);
+    await Promise.all([loadDocuments(), loadMessages(), loadAnnouncements()]);
     if (profile.role === "admin") await loadAdmin();
-    navigate(location.hash.slice(1) || "dashboard");
+    setupRealtime();
+    var requestedView = location.hash.slice(1);
+    if (profile.role === "admin" && (!requestedView || requestedView === "dashboard" || requestedView === "documents")) requestedView = "admin";
+    navigate(requestedView || "dashboard");
   }
 
   function fillIdentity() {
@@ -128,6 +140,7 @@
     $("#top-initials").textContent = initials(name);
     $("#today").textContent = new Intl.DateTimeFormat("fr-FR", {weekday:"long", day:"numeric", month:"long", year:"numeric"}).format(new Date());
     $$(".admin-only").forEach(function (element) { element.hidden = profile.role !== "admin"; });
+    $$(".student-only").forEach(function (element) { element.hidden = profile.role === "admin"; });
     var form = $("#profile-form");
     form.elements.full_name.value = profile.full_name || "";
     form.elements.student_number.value = profile.student_number || "";
@@ -137,7 +150,8 @@
 
   function navigate(view) {
     if (view === "admin" && (!profile || profile.role !== "admin")) view = "dashboard";
-    var labels = {dashboard:"Tableau de bord", documents:"Mes documents", messages:"Messagerie", profile:"Mon profil", admin:"Secrétariat"};
+    if (profile && profile.role === "admin" && (view === "dashboard" || view === "documents")) view = "admin";
+    var labels = {dashboard:"Tableau de bord", documents:"Mes documents", messages:"Support", announcements:"Annonces", profile:"Mon profil", admin:"Secrétariat"};
     if (!labels[view]) view = "dashboard";
     $$(".view").forEach(function (section) { section.classList.remove("active"); });
     $("#view-" + view).classList.add("active");
@@ -162,6 +176,7 @@
   }
 
   function mergedDocuments() {
+    if (profile && profile.role === "admin") return [];
     return documentTypes.map(function (type) {
       var submission = submissions.find(function (item) { return item.document_type_id === type.id; });
       return {type:type, submission:submission || null, status:submission ? submission.status : "missing"};
@@ -274,22 +289,42 @@
   }
 
   async function loadMessages() {
-    var staffQuery = client.from("profiles").select("id,full_name,role").order("full_name");
-    if (profile.role !== "admin") staffQuery = staffQuery.eq("role", "admin");
+    var previousRecipient = $("#message-recipient").value;
+    var staffQuery = client.from("profiles").select("id,full_name,formation,role,is_support").order("full_name");
+    staffQuery = profile.role === "admin" ? staffQuery.eq("role", "student") : staffQuery.eq("role", "admin").eq("is_support", true);
     var staff = await staffQuery;
+    if (staff.error) return showToast(friendlyError(staff.error), true);
     var select = $("#message-recipient");
-    select.innerHTML = '<option value="">Choisir le destinataire</option>' + (staff.data || []).filter(function (p) { return p.id !== session.user.id; }).map(function (p) {
-      return '<option value="' + p.id + '">' + escapeHtml(p.full_name) + (p.role === "admin" ? " · Secrétariat" : " · Apprenant") + "</option>";
+    var recipients = (staff.data || []).filter(function (p) { return p.id !== session.user.id; });
+    select.innerHTML = '<option value="">' + (profile.role === "admin" ? "Choisir un élève" : "Support administratif") + '</option>' + recipients.map(function (p) {
+      return '<option value="' + p.id + '">' + escapeHtml(p.full_name) + (p.role === "admin" ? " · Support" : " · " + escapeHtml(p.formation || "Apprenant")) + "</option>";
     }).join("");
+    if (recipients.some(function (p) { return p.id === previousRecipient; })) select.value = previousRecipient;
+    else if (profile.role !== "admin" && recipients.length) select.value = recipients[0].id;
+    var noRecipient = recipients.length === 0;
+    var hint = $("#message-recipient-hint");
+    hint.hidden = !noRecipient;
+    hint.textContent = profile.role === "admin" ? "Aucun apprenant n'est encore inscrit. La liste se remplira dès qu'un élève créera son compte." : "Le compte support n'est pas encore activé. Réexécutez le script SQL mis à jour.";
+    select.disabled = noRecipient;
+    $("#message-content").disabled = noRecipient;
+    $("button[type=submit]", $("#message-form")).disabled = noRecipient;
     var result = await client.from("messages").select("*,sender:profiles!messages_sender_id_fkey(full_name),recipient:profiles!messages_recipient_id_fkey(full_name)").order("created_at");
-    if (result.error) return;
-    var messages = result.data || [];
+    if (result.error) return showToast(friendlyError(result.error), true);
+    allMessages = result.data || [];
+    renderConversation();
+  }
+  function renderConversation() {
+    var selected = $("#message-recipient").value;
+    var messages = selected ? allMessages.filter(function (message) {
+      return (message.sender_id === session.user.id && message.recipient_id === selected) ||
+        (message.sender_id === selected && message.recipient_id === session.user.id);
+    }) : [];
     var history = $("#message-history");
     history.innerHTML = messages.length ? messages.map(function (message) {
       var mine = message.sender_id === session.user.id;
       var person = mine ? (message.recipient && message.recipient.full_name) : (message.sender && message.sender.full_name);
       return '<article class="message ' + (mine ? "mine" : "") + '"><p>' + escapeHtml(message.content) + '</p><small>' + (mine ? "À " : "De ") + escapeHtml(person || "Secrétariat") + " · " + formatDateTime(message.created_at) + "</small></article>";
-    }).join("") : '<div class="empty"><span>✉</span><h3>Aucun message</h3><p>Vous pouvez démarrer une conversation avec le secrétariat.</p></div>';
+    }).join("") : '<div class="empty"><span>✉</span><h3>' + (selected ? "Aucun message" : "Choisissez une conversation") + '</h3><p>' + (selected ? "Écrivez le premier message ci-dessous." : "Sélectionnez un élève pour consulter ses échanges.") + '</p></div>';
     history.scrollTop = history.scrollHeight;
   }
   async function sendMessage(event) {
@@ -304,6 +339,50 @@
     $("#message-content").value = "";
     showToast("Message envoyé.");
     await loadMessages();
+  }
+
+  async function loadAnnouncements() {
+    var result = await client.from("announcements").select("*").order("published_at", {ascending:false});
+    if (result.error) return showToast(friendlyError(result.error), true);
+    announcements = result.data || [];
+    renderAnnouncements();
+  }
+  function renderAnnouncements() {
+    var list = $("#announcement-list");
+    list.innerHTML = announcements.map(function (announcement) {
+      var deleteButton = profile.role === "admin" ? '<button class="announcement-delete" data-delete-announcement="' + announcement.id + '">Supprimer</button>' : "";
+      return '<article class="announcement-card"><header><div><p class="eyebrow orange">Annonce</p><h2>' + escapeHtml(announcement.title) + '</h2></div><div><time>' + formatDateTime(announcement.published_at) + '</time>' + deleteButton + '</div></header><p>' + escapeHtml(announcement.content) + '</p><span class="announcement-target">' + escapeHtml(announcement.formation || "Tous les apprenants") + '</span></article>';
+    }).join("");
+    $("#announcements-empty").hidden = announcements.length > 0;
+    $("#announcement-badge").hidden = announcements.length === 0;
+    $("#announcement-badge").textContent = announcements.length;
+    $$('[data-delete-announcement]').forEach(function (button) {
+      button.onclick = function () { deleteAnnouncement(button.dataset.deleteAnnouncement); };
+    });
+  }
+  async function createAnnouncement(event) {
+    event.preventDefault();
+    var form = event.currentTarget;
+    if (profile.role !== "admin") return;
+    setBusy(form, true);
+    var result = await client.from("announcements").insert({
+      title:form.elements.title.value.trim(),
+      content:form.elements.content.value.trim(),
+      formation:form.elements.formation.value || null,
+      created_by:session.user.id
+    });
+    setBusy(form, false);
+    if (result.error) return showToast(friendlyError(result.error), true);
+    form.reset();
+    showToast("Annonce publiée. Les élèves la voient immédiatement.");
+    await loadAnnouncements();
+  }
+  async function deleteAnnouncement(id) {
+    if (profile.role !== "admin" || !window.confirm("Supprimer cette annonce ?")) return;
+    var result = await client.from("announcements").delete().eq("id", id);
+    if (result.error) return showToast(friendlyError(result.error), true);
+    showToast("Annonce supprimée.");
+    await loadAnnouncements();
   }
 
   async function saveProfile(event) {
@@ -331,13 +410,18 @@
   }
 
   async function loadAdmin() {
-    var result = await client.from("submissions").select("*,profiles!submissions_user_id_fkey(full_name,student_number,formation),document_types(title)").order("submitted_at", {ascending:false});
-    if (result.error) return showToast(friendlyError(result.error), true);
-    submissions.admin = result.data || [];
+    var results = await Promise.all([
+      client.from("profiles").select("id,full_name,student_number,formation,created_at").eq("role", "student").order("full_name"),
+      client.from("submissions").select("*,profiles!submissions_user_id_fkey(full_name,student_number,formation),document_types(title)").order("submitted_at", {ascending:false})
+    ]);
+    if (results[0].error) return showToast(friendlyError(results[0].error), true);
+    if (results[1].error) return showToast(friendlyError(results[1].error), true);
+    adminStudents = results[0].data || [];
+    adminSubmissions = results[1].data || [];
     renderAdmin();
   }
   function renderAdmin() {
-    var all = submissions.admin || [];
+    var all = adminSubmissions;
     var search = ($("#admin-search").value || "").toLowerCase();
     var filtered = all.filter(function (item) {
       var name = item.profiles && item.profiles.full_name || "";
@@ -346,6 +430,21 @@
     $("#admin-approved").textContent = all.filter(function (i) { return i.status === "approved"; }).length;
     $("#admin-review").textContent = all.filter(function (i) { return i.status === "submitted"; }).length;
     $("#admin-types").textContent = documentTypes.length;
+    var visibleStudents = adminStudents.filter(function (student) {
+      return student.full_name.toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
+    });
+    $("#admin-students").innerHTML = visibleStudents.map(function (student) {
+      var required = documentTypes.filter(function (type) { return type.active && (!type.formation || type.formation === student.formation); });
+      var studentSubmissions = all.filter(function (item) { return item.user_id === student.id; });
+      var submitted = studentSubmissions.filter(function (item) { return required.some(function (type) { return type.id === item.document_type_id; }); }).length;
+      var approved = studentSubmissions.filter(function (item) { return item.status === "approved" && required.some(function (type) { return type.id === item.document_type_id; }); }).length;
+      var total = required.length;
+      var percent = total ? Math.round((submitted / total) * 100) : 0;
+      var state = total === 0 ? "Aucune demande" : approved === total ? "Complet" : submitted === total ? "À vérifier" : submitted === 0 ? "Non commencé" : "En cours";
+      var stateClass = state === "Complet" ? "approved" : state === "À vérifier" ? "submitted" : "missing";
+      return '<tr><td><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td>' + escapeHtml(student.formation || "Non renseignée") + '</td><td><div class="progress-track"><i style="width:' + percent + '%"></i></div><span class="progress-label">' + submitted + ' sur ' + total + ' transmis · ' + percent + ' %</span></td><td>' + approved + ' sur ' + total + '</td><td><span class="status ' + stateClass + '">' + state + '</span></td></tr>';
+    }).join("");
+    $("#admin-students-empty").hidden = visibleStudents.length > 0;
     $("#admin-submissions").innerHTML = filtered.map(function (item) {
       var p = item.profiles || {};
       var t = item.document_types || {};
@@ -382,6 +481,26 @@
     await loadDocuments(); await loadAdmin();
   }
 
+  function setupRealtime() {
+    if (liveChannel) client.removeChannel(liveChannel);
+    liveChannel = client.channel("cazotte-live-" + session.user.id)
+      .on("postgres_changes", {event:"*", schema:"public", table:"submissions"}, function () {
+        if (profile.role === "admin") loadAdmin();
+        else loadDocuments();
+      })
+      .on("postgres_changes", {event:"*", schema:"public", table:"profiles"}, function () {
+        if (profile.role === "admin") Promise.all([loadAdmin(), loadMessages()]);
+      })
+      .on("postgres_changes", {event:"*", schema:"public", table:"document_types"}, function () {
+        loadDocuments().then(function () { if (profile.role === "admin") loadAdmin(); });
+      })
+      .on("postgres_changes", {event:"*", schema:"public", table:"messages"}, function () { loadMessages(); })
+      .on("postgres_changes", {event:"*", schema:"public", table:"announcements"}, function () { loadAnnouncements(); })
+      .subscribe(function (status) {
+        if (status === "CHANNEL_ERROR") showToast("La mise à jour automatique est momentanément indisponible.", true);
+      });
+  }
+
   $$(".auth-tabs button, [data-auth-tab]").forEach(function (button) { button.addEventListener("click", function () { switchAuth(button.dataset.authTab); }); });
   $("#forgot-button").addEventListener("click", function () { switchAuth("reset"); });
   $("#login-form").addEventListener("submit", async function (event) {
@@ -412,6 +531,8 @@
   $("#upload-file").addEventListener("change", function () { $("#upload-file-name").textContent = this.files[0] ? this.files[0].name : "Sélectionner un fichier"; });
   $("#upload-form").addEventListener("submit", uploadDocument);
   $("#message-form").addEventListener("submit", sendMessage);
+  $("#message-recipient").addEventListener("change", renderConversation);
+  $("#announcement-form").addEventListener("submit", createAnnouncement);
   $("#profile-form").addEventListener("submit", saveProfile);
   $("#password-form").addEventListener("submit", changePassword);
   $("#admin-search").addEventListener("input", renderAdmin);

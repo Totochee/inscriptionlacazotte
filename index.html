@@ -50,14 +50,14 @@
   <div class="app" id="app" hidden>
     <aside class="sidebar" id="sidebar">
       <a class="brand" href="#dashboard"><span class="logo">LC</span><span><strong>La Cazotte</strong><small>Mes documents</small></span></a>
-      <nav><button class="nav-item active" data-view="dashboard"><span>⌂</span>Tableau de bord</button><button class="nav-item" data-view="documents"><span>▤</span>Mes documents <b id="pending-badge" hidden></b></button><button class="nav-item" data-view="messages"><span>✉</span>Messagerie</button><button class="nav-item" data-view="profile"><span>○</span>Mon profil</button><button class="nav-item admin-only" data-view="admin" hidden><span>⚙</span>Secrétariat</button></nav>
+      <nav><button class="nav-item student-only active" data-view="dashboard"><span>⌂</span>Tableau de bord</button><button class="nav-item student-only" data-view="documents"><span>▤</span>Mes documents <b id="pending-badge" hidden></b></button><button class="nav-item" data-view="messages"><span>✉</span>Support</button><button class="nav-item" data-view="announcements"><span>◇</span>Annonces <b id="announcement-badge" hidden></b></button><button class="nav-item" data-view="profile"><span>○</span>Mon profil</button><button class="nav-item admin-only" data-view="admin" hidden><span>⚙</span>Secrétariat</button></nav>
       <div class="sidebar-foot"><div class="user-mini"><span class="avatar" id="side-initials"></span><span><strong id="side-name"></strong><small id="side-role"></small></span></div><button class="logout" id="logout-button">Se déconnecter</button></div>
     </aside>
     <div class="page">
       <header class="topbar"><button class="menu" id="menu-button" aria-label="Ouvrir le menu">☰</button><span class="breadcrumb">Portail administratif <b>/</b> <strong id="page-label">Tableau de bord</strong></span><div class="top-user"><span id="top-name"></span><span class="avatar" id="top-initials"></span></div></header>
       <main>
         <section class="view active" id="view-dashboard">
-          <div class="hero"><div><p class="eyebrow green" id="today"></p><h1>Bonjour <span id="welcome-name"></span></h1><p id="dashboard-message">Chargement de votre dossier…</p></div><button class="primary" data-view="documents">Déposer un document</button></div>
+          <div class="hero"><div><p class="eyebrow green" id="today"></p><h1>Bonjour <span id="welcome-name"></span></h1><p id="dashboard-message">Chargement de votre dossier…</p></div><button class="primary student-only" data-view="documents">Déposer un document</button></div>
           <div class="stats"><article><span class="stat-icon green-bg">✓</span><div><strong id="stat-valid">0</strong><small>Documents validés</small></div></article><article><span class="stat-icon orange-bg">↑</span><div><strong id="stat-pending">0</strong><small>Documents à déposer</small></div></article><article><span class="stat-icon blue-bg">◷</span><div><strong id="stat-review">0</strong><small>En cours de vérification</small></div></article></div>
           <div class="grid"><section class="panel"><div class="panel-head"><div><p class="eyebrow orange">À traiter</p><h2>Documents attendus</h2></div><button class="link-button" data-view="documents">Voir tout →</button></div><div id="dashboard-documents"></div></section><aside class="panel contact-card"><span class="contact-icon">✉</span><p class="eyebrow">Besoin d’aide ?</p><h2>Contactez le secrétariat</h2><p>Posez une question directement depuis votre espace sécurisé.</p><button class="secondary full" data-view="messages">Ouvrir la messagerie</button></aside></div>
         </section>
@@ -70,8 +70,14 @@
         </section>
 
         <section class="view" id="view-messages">
-          <div class="page-head"><div><p class="eyebrow green">Échanges sécurisés</p><h1>Messagerie</h1><p>Contactez un membre du secrétariat au sujet de votre dossier.</p></div></div>
-          <section class="panel messaging"><div class="message-history" id="message-history"><div class="empty"><span>✉</span><h3>Aucun message</h3><p>Vous pouvez démarrer une conversation avec le secrétariat.</p></div></div><form id="message-form" class="compose"><select id="message-recipient" required><option value="">Choisir le destinataire</option></select><textarea id="message-content" required maxlength="2000" placeholder="Écrivez votre message…"></textarea><button class="primary" type="submit">Envoyer</button></form></section>
+          <div class="page-head"><div><p class="eyebrow green">Conversation privée</p><h1>Support administratif</h1><p class="student-only">Posez vos questions au compte support de l’établissement.</p><p class="admin-only" hidden>Sélectionnez un élève pour consulter sa conversation et lui répondre.</p></div></div>
+          <section class="panel messaging"><div class="conversation-toolbar"><label>Conversation avec<select id="message-recipient" aria-label="Destinataire" required><option value="">Choisir le destinataire</option></select></label><span class="live-indicator"><i></i> Actualisation en temps réel</span></div><div class="message-history" id="message-history"><div class="empty"><span>✉</span><h3>Aucun message</h3><p>La conversation apparaîtra ici.</p></div></div><form id="message-form" class="compose"><textarea id="message-content" aria-label="Message" required maxlength="2000" placeholder="Écrivez votre message…"></textarea><button class="primary" type="submit">Envoyer</button><p class="recipient-hint" id="message-recipient-hint" hidden></p></form></section>
+        </section>
+
+        <section class="view" id="view-announcements">
+          <div class="page-head"><div><p class="eyebrow green">Informations de l’établissement</p><h1>Annonces</h1><p>Les informations générales publiées par le secrétariat sont en lecture seule.</p></div></div>
+          <form class="panel announcement-form admin-only" id="announcement-form" hidden><div><p class="eyebrow orange">Nouvelle annonce</p><h2>Publier une information</h2></div><div class="two-fields"><label>Titre<input name="title" required maxlength="160"></label><label>Destinataires<select name="formation"><option value="">Tous les apprenants</option><option>3e de l'enseignement agricole</option><option>Seconde générale et technologique</option><option>Bac technologique STAV</option><option>Bac Pro CGEH hippique</option><option>Bac Pro CGEA équin</option><option>Bac Pro CGEA ovin</option><option>BTSA Métiers de l'élevage</option><option>Formation CFA / CFPPA</option></select></label></div><label>Annonce<textarea name="content" required maxlength="4000" placeholder="Rédigez l’annonce…"></textarea></label><div class="form-actions"><button class="primary" type="submit">Publier l’annonce</button></div></form>
+          <div class="announcement-list" id="announcement-list"></div><div class="panel empty" id="announcements-empty" hidden><span>◇</span><h3>Aucune annonce</h3><p>Les nouvelles informations de l’établissement apparaîtront ici.</p></div>
         </section>
 
         <section class="view" id="view-profile">
@@ -83,6 +89,7 @@
         <section class="view" id="view-admin">
           <div class="page-head admin-head"><div><p class="eyebrow orange">Espace personnel habilité</p><h1>Secrétariat</h1><p>Gérez les documents demandés et contrôlez les dépôts reçus.</p></div><button class="primary" id="new-request-button">＋ Demander un document</button></div>
           <div class="stats admin-stats"><article><span class="stat-icon green-bg">✓</span><div><strong id="admin-approved">0</strong><small>Pièces validées</small></div></article><article><span class="stat-icon orange-bg">◷</span><div><strong id="admin-review">0</strong><small>Pièces à vérifier</small></div></article><article><span class="stat-icon blue-bg">▤</span><div><strong id="admin-types">0</strong><small>Demandes actives</small></div></article></div>
+          <section class="panel list-panel student-progress-panel"><div class="panel-head"><div><p class="eyebrow green">Mise à jour automatique</p><h2>Avancement des élèves</h2></div><span class="live-indicator"><i></i> Temps réel</span></div><div class="admin-table-wrap"><table><thead><tr><th>Élève</th><th>Formation</th><th>Dossier</th><th>Validés</th><th>État</th></tr></thead><tbody id="admin-students"></tbody></table><div class="empty" id="admin-students-empty" hidden><span>○</span><h3>Aucun élève inscrit</h3><p>Les comptes apprenants apparaîtront ici dès leur inscription.</p></div></div></section>
           <section class="panel list-panel"><div class="panel-head"><div><p class="eyebrow">Dépôts reçus</p><h2>Pièces à contrôler</h2></div><label class="search">⌕<input id="admin-search" type="search" placeholder="Rechercher un apprenant"></label></div><div class="admin-table-wrap"><table><thead><tr><th>Apprenant</th><th>Document</th><th>Déposé le</th><th>Statut</th><th>Actions</th></tr></thead><tbody id="admin-submissions"></tbody></table><div class="empty" id="admin-empty" hidden><span>✓</span><h3>Aucun dépôt à afficher</h3><p>Les pièces transmises par les apprenants apparaîtront ici.</p></div></div></section>
         </section>
       </main>
@@ -96,6 +103,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=3"></script>
-  <script src="app.js?v=3"></script>
+  <script src="app.js?v=6"></script>
 </body>
 </html>
