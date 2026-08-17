@@ -1,0 +1,181 @@
+<!doctype html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#164a35">
+  <meta name="description" content="Portail de dépôt et de suivi des documents administratifs de La Cazotte.">
+  <title>Mes documents · La Cazotte</title>
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <div class="app-shell">
+    <aside class="sidebar" id="sidebar">
+      <a class="brand" href="#dashboard" aria-label="Accueil La Cazotte">
+        <span class="brand-mark" aria-hidden="true">LC</span>
+        <span><strong>La Cazotte</strong><small>Mes documents</small></span>
+      </a>
+
+      <nav class="main-nav" aria-label="Navigation principale">
+        <button class="nav-item active" data-view="dashboard"><span aria-hidden="true">⌂</span> Tableau de bord</button>
+        <button class="nav-item" data-view="documents"><span aria-hidden="true">▤</span> Mes documents <b class="nav-count">2</b></button>
+        <button class="nav-item" data-view="messages"><span aria-hidden="true">✉</span> Messages <b class="nav-dot" aria-label="1 nouveau message"></b></button>
+        <button class="nav-item" data-view="help"><span aria-hidden="true">?</span> Aide</button>
+      </nav>
+
+      <div class="sidebar-bottom">
+        <div class="campaign-card">
+          <span class="eyebrow">Dossier 2026–2027</span>
+          <strong>78 % transmis</strong>
+          <div class="progress" aria-label="Dossier transmis à 78 %"><i style="width:78%"></i></div>
+          <small>7 documents transmis sur 9</small>
+        </div>
+        <button class="profile-mini" id="role-switch" type="button" title="Afficher la démonstration du secrétariat">
+          <span class="avatar">CM</span>
+          <span><strong>Camille Martin</strong><small>BTSA · 1re année</small></span>
+          <span aria-hidden="true">⋯</span>
+        </button>
+      </div>
+    </aside>
+
+    <div class="page-area">
+      <header class="topbar">
+        <button class="menu-button" id="menu-button" aria-label="Ouvrir le menu" aria-expanded="false">☰</button>
+        <div class="breadcrumb"><span>Portail administratif</span><b>/</b><strong id="page-label">Tableau de bord</strong></div>
+        <div class="top-actions">
+          <button class="icon-button" id="notification-button" aria-label="Notifications">♢<i></i></button>
+          <button class="secondary small" id="admin-button">Vue secrétariat</button>
+          <span class="avatar desktop-avatar">CM</span>
+        </div>
+      </header>
+
+      <main>
+        <section class="view active" id="view-dashboard">
+          <div class="welcome-row">
+            <div>
+              <span class="eyebrow green">Lundi 17 août 2026</span>
+              <h1>Bonjour Camille <span aria-hidden="true">👋</span></h1>
+              <p>Votre dossier est presque terminé. Il reste deux éléments à transmettre.</p>
+            </div>
+            <button class="primary" data-open-upload="Attestation de responsabilité civile"><span aria-hidden="true">＋</span> Déposer un document</button>
+          </div>
+
+          <div class="summary-grid" aria-label="Résumé du dossier">
+            <article class="summary-card accent">
+              <div class="summary-icon" aria-hidden="true">✓</div>
+              <div><strong>6</strong><span>Documents validés</span></div>
+              <small>Votre dossier avance bien</small>
+            </article>
+            <article class="summary-card warning">
+              <div class="summary-icon" aria-hidden="true">↑</div>
+              <div><strong>2</strong><span>Documents attendus</span></div>
+              <small>À transmettre avant le 28 août</small>
+            </article>
+            <article class="summary-card neutral">
+              <div class="summary-icon" aria-hidden="true">◷</div>
+              <div><strong>1</strong><span>En cours de vérification</span></div>
+              <small>Réponse sous 2 jours ouvrés</small>
+            </article>
+          </div>
+
+          <div class="content-grid">
+            <section class="panel important-panel">
+              <div class="panel-heading">
+                <div><span class="eyebrow orange">À faire en priorité</span><h2>Documents attendus</h2></div>
+                <button class="text-button" data-go="documents">Voir tous les documents →</button>
+              </div>
+              <div class="document-list compact" id="priority-list"></div>
+            </section>
+
+            <aside class="panel timeline-panel">
+              <div class="panel-heading"><div><span class="eyebrow">Suivi</span><h2>Activité récente</h2></div></div>
+              <ol class="timeline">
+                <li class="done"><i>✓</i><div><strong>RIB validé</strong><span>Par le secrétariat</span><small>Aujourd'hui, 09:42</small></div></li>
+                <li><i>↑</i><div><strong>Certificat de scolarité déposé</strong><span>Vérification en cours</span><small>Hier, 16:18</small></div></li>
+                <li class="done"><i>✓</i><div><strong>Pièce d'identité validée</strong><span>Par le secrétariat</span><small>12 août, 11:05</small></div></li>
+              </ol>
+              <button class="secondary full" data-go="messages">Consulter mes messages</button>
+            </aside>
+          </div>
+        </section>
+
+        <section class="view" id="view-documents">
+          <div class="page-title-row">
+            <div><span class="eyebrow green">Année scolaire 2026–2027</span><h1>Mes documents</h1><p>Retrouvez toutes les pièces demandées et suivez leur validation.</p></div>
+            <button class="primary" data-open-upload=""><span aria-hidden="true">＋</span> Nouveau dépôt</button>
+          </div>
+          <div class="filter-bar">
+            <label class="search"><span aria-hidden="true">⌕</span><input id="document-search" type="search" placeholder="Rechercher un document…"></label>
+            <div class="chips" aria-label="Filtrer par statut">
+              <button class="chip active" data-filter="all">Tous <b>9</b></button>
+              <button class="chip" data-filter="pending">À déposer <b>2</b></button>
+              <button class="chip" data-filter="review">En vérification <b>1</b></button>
+              <button class="chip" data-filter="valid">Validés <b>6</b></button>
+            </div>
+          </div>
+          <section class="panel documents-panel">
+            <div class="document-table-head"><span>Document</span><span>Échéance</span><span>Statut</span><span>Action</span></div>
+            <div class="document-list" id="all-documents"></div>
+            <div class="empty-state" id="empty-state" hidden><span>⌕</span><h3>Aucun document trouvé</h3><p>Essayez un autre mot ou modifiez le filtre.</p></div>
+          </section>
+          <div class="privacy-note"><span aria-hidden="true">⌾</span><p><strong>Vos documents sont confidentiels.</strong> Seuls les personnels habilités de l'établissement peuvent consulter les pièces nécessaires au traitement de votre dossier.</p></div>
+        </section>
+
+        <section class="view" id="view-messages">
+          <div class="page-title-row"><div><span class="eyebrow green">Échanges avec l'établissement</span><h1>Messages</h1><p>Retrouvez les demandes et réponses du secrétariat.</p></div><button class="primary" id="new-message">Nouveau message</button></div>
+          <div class="messages-layout panel">
+            <div class="conversation-list">
+              <button class="conversation active"><span class="avatar green-avatar">SC</span><span><strong>Secrétariat scolarité</strong><small>Votre RIB a bien été validé.</small></span><time>09:42</time></button>
+              <button class="conversation"><span class="avatar gold-avatar">VI</span><span><strong>Vie scolaire</strong><small>Informations concernant l'internat</small></span><time>12 août</time></button>
+            </div>
+            <div class="message-thread">
+              <div class="thread-title"><span class="avatar green-avatar">SC</span><div><strong>Secrétariat scolarité</strong><small>Répond généralement sous 2 jours ouvrés</small></div></div>
+              <div class="bubbles">
+                <div class="bubble received"><p>Bonjour Camille, votre relevé d'identité bancaire a bien été reçu et validé.</p><time>Aujourd'hui, 09:42</time></div>
+                <div class="bubble received"><p>Il vous reste à déposer votre attestation de responsabilité civile et l'autorisation de droit à l'image.</p><time>Aujourd'hui, 09:43</time></div>
+              </div>
+              <form class="message-form" id="message-form"><input aria-label="Votre message" placeholder="Écrivez votre message…" required><button class="primary" type="submit">Envoyer</button></form>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-help">
+          <div class="page-title-row"><div><span class="eyebrow green">Centre d'aide</span><h1>Comment pouvons-nous vous aider ?</h1><p>Les réponses aux questions les plus fréquentes sur votre dossier.</p></div></div>
+          <div class="help-grid">
+            <article class="panel help-card"><span>↑</span><h2>Déposer un document</h2><p>Formats acceptés : PDF, JPG et PNG. Taille maximale conseillée : 10 Mo.</p><button class="text-button" data-open-upload="">Faire un dépôt →</button></article>
+            <article class="panel help-card"><span>↻</span><h2>Remplacer une pièce</h2><p>Un document refusé peut être corrigé et déposé à nouveau depuis « Mes documents ».</p></article>
+            <article class="panel help-card"><span>✉</span><h2>Contacter le secrétariat</h2><p>Une question sur une pièce ? Utilisez la messagerie sécurisée du portail.</p><button class="text-button" data-go="messages">Ouvrir la messagerie →</button></article>
+          </div>
+          <section class="panel faq"><h2>Questions fréquentes</h2><details><summary>Pourquoi mon document est-il encore en vérification ?</summary><p>Le secrétariat contrôle la lisibilité et la conformité des pièces. Le délai indicatif est de deux jours ouvrés.</p></details><details><summary>Puis-je déposer un document depuis mon téléphone ?</summary><p>Oui. Vous pouvez sélectionner un fichier ou prendre une photo nette du document depuis un téléphone compatible.</p></details><details><summary>Qui peut voir mes documents ?</summary><p>Uniquement les personnels habilités pour le traitement de votre dossier administratif.</p></details></section>
+        </section>
+
+        <section class="view" id="view-admin">
+          <div class="page-title-row"><div><span class="eyebrow orange">Espace professionnel · Démonstration</span><h1>Suivi des dossiers</h1><p>Contrôlez les dépôts et relancez les dossiers incomplets.</p></div><button class="secondary" id="student-button">← Retour espace apprenant</button></div>
+          <div class="summary-grid admin-summary"><article class="summary-card accent"><div><strong>184</strong><span>Dossiers complets</span></div><small>+12 cette semaine</small></article><article class="summary-card warning"><div><strong>37</strong><span>Dossiers incomplets</span></div><small>18 échéances proches</small></article><article class="summary-card neutral"><div><strong>14</strong><span>Pièces à vérifier</span></div><small>4 déposées aujourd'hui</small></article></div>
+          <section class="panel admin-panel">
+            <div class="admin-toolbar"><label class="search"><span>⌕</span><input id="student-search" type="search" placeholder="Rechercher un apprenant…"></label><select aria-label="Filtrer par formation"><option>Toutes les formations</option><option>BTSA Métiers de l'élevage</option><option>Bac Pro CGEA</option><option>Bac Techno STAV</option></select><button class="secondary" id="remind-button">Envoyer une relance</button></div>
+            <div class="admin-table-wrap"><table><thead><tr><th>Apprenant</th><th>Formation</th><th>Progression</th><th>Dernière activité</th><th>Statut</th><th></th></tr></thead><tbody id="student-table"></tbody></table></div>
+          </section>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <div class="modal-backdrop" id="upload-modal" hidden>
+    <section class="modal" role="dialog" aria-modal="true" aria-labelledby="upload-title">
+      <button class="modal-close" id="modal-close" aria-label="Fermer">×</button>
+      <span class="modal-icon">↑</span><span class="eyebrow green">Dépôt sécurisé</span><h2 id="upload-title">Déposer un document</h2><p>Sélectionnez la pièce concernée, puis ajoutez votre fichier.</p>
+      <form id="upload-form">
+        <label class="field">Type de document<select id="document-type" required><option value="">Sélectionner…</option><option>Attestation de responsabilité civile</option><option>Autorisation de droit à l'image</option><option>Pièce d'identité</option><option>Justificatif de domicile</option><option>Relevé d'identité bancaire</option><option>Autre document</option></select></label>
+        <label class="drop-zone" id="drop-zone"><input id="file-input" type="file" accept=".pdf,.jpg,.jpeg,.png" required><span class="file-symbol">＋</span><strong id="file-label">Choisir un fichier</strong><small>PDF, JPG ou PNG · 10 Mo maximum</small></label>
+        <div class="modal-actions"><button class="secondary" type="button" id="modal-cancel">Annuler</button><button class="primary" type="submit">Transmettre le document</button></div>
+      </form>
+      <div class="demo-warning"><strong>Version de démonstration :</strong> aucun fichier n'est envoyé ni conservé.</div>
+    </section>
+  </div>
+
+  <div class="notification-popover panel" id="notification-popover" hidden><strong>Notifications</strong><p><span>✓</span> Votre RIB a été validé.<small>Il y a 2 heures</small></p><p><span>!</span> Deux documents sont attendus avant le 28 août.<small>Hier</small></p></div>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+  <script src="app.js"></script>
+</body>
+</html>
