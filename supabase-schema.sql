@@ -201,6 +201,13 @@ drop policy if exists "submissions_admin_delete" on public.submissions;
 create policy "submissions_admin_delete" on public.submissions for delete to authenticated
 using ((select public.is_admin()));
 
+drop policy if exists "submissions_student_delete" on public.submissions;
+create policy "submissions_student_delete" on public.submissions for delete to authenticated
+using (
+  user_id = (select auth.uid())
+  and status in ('submitted', 'rejected')
+);
+
 drop policy if exists "messages_select_participants" on public.messages;
 create policy "messages_select_participants" on public.messages for select to authenticated
 using (

@@ -189,6 +189,8 @@
     var type = item.type;
     var submission = item.submission;
     var action = item.status === "missing" ? "Déposer" : item.status === "rejected" ? "Corriger" : "Télécharger";
+    var canDelete = submission && (item.status === "submitted" || item.status === "rejected");
+    var deleteButton = canDelete ? '<button class="action delete" data-delete-submission="' + submission.id + '">Supprimer</button>' : "";
     var detail = submission ? escapeHtml(submission.original_name) : escapeHtml(type.category || "Document administratif");
     var rejected = item.status === "rejected" && submission.rejection_reason ?
       '<small class="reject-reason">Motif : ' + escapeHtml(submission.rejection_reason) + "</small>" : "";
@@ -196,7 +198,7 @@
       '<div class="doc-main"><span class="file-icon">' + (item.status === "approved" ? "✓" : "DOC") + '</span><div><strong>' + escapeHtml(type.title) + '</strong><small>' + detail + '</small>' + rejected + '</div></div>' +
       '<span class="deadline">' + (type.deadline ? "Avant le " + formatDate(type.deadline) : "Sans échéance") + '</span>' +
       (dashboard ? "" : '<span class="status ' + item.status + '">' + statusText(item.status) + '</span>') +
-      '<button class="action" data-doc-id="' + type.id + '" data-doc-status="' + item.status + '">' + action + "</button></article>";
+      '<div class="doc-actions"><button class="action" data-doc-id="' + type.id + '" data-doc-status="' + item.status + '">' + action + "</button>" + deleteButton + "</div></article>";
   }
   function renderDocuments() {
     var search = ($("#document-search").value || "").toLowerCase();
@@ -233,6 +235,12 @@
         if (!item) return;
         if (item.status === "missing" || item.status === "rejected") openUpload(item);
         else downloadSubmission(item.submission);
+      };
+    });
+    $$('[data-delete-submission]').forEach(function (button) {
+      button.onclick = function () {
+        var submission = submissions.find(function (item) { return item.id === button.dataset.deleteSubmission; });
+        if (submission) deleteSubmission(submission, button);
       };
     });
   }
@@ -286,6 +294,20 @@
     var signed = await client.storage.from("administrative-documents").createSignedUrl(submission.storage_path, 60, {download:submission.original_name});
     if (signed.error) return showToast(friendlyError(signed.error), true);
     window.open(signed.data.signedUrl, "_blank", "noopener");
+  }
+
+  async function deleteSubmission(submission, button) {
+    if (!submission || !confirm("Supprimer ce document ? Vous devrez le déposer de nouveau.")) return;
+    button.disabled = true;
+    var deleted = await client.from("submissions").delete().eq("id", submission.id).eq("user_id", session.user.id).select("id").maybeSingle();
+    if (deleted.error || !deleted.data) {
+      button.disabled = false;
+      return showToast(deleted.error ? friendlyError(deleted.error) : "Ce document ne peut plus être supprimé.", true);
+    }
+    var removed = await client.storage.from("administrative-documents").remove([submission.storage_path]);
+    if (removed.error) showToast("Le dépôt a été retiré, mais le nettoyage du fichier devra être vérifié par le secrétariat.", true);
+    else showToast("Document supprimé. Vous pouvez maintenant déposer le bon fichier.");
+    await loadDocuments();
   }
 
   async function loadMessages() {

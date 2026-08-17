@@ -9,6 +9,7 @@ Application HTML/CSS/JavaScript destinée à GitHub Pages, avec authentification
 - profil apprenant et formation ;
 - demandes de documents créées par le secrétariat ;
 - dépôt réel de PDF, JPG et PNG (10 Mo maximum) ;
+- suppression par l'élève d'un dépôt en vérification ou refusé afin de transmettre le bon fichier ;
 - stockage privé avec règles d'accès par utilisateur ;
 - téléchargement temporaire par URL signée ;
 - validation ou refus avec motif par le secrétariat ;
