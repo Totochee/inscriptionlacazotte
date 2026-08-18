@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#123d2d">
   <meta name="description" content="Portail administratif sécurisé de l'EPLEFPA La Cazotte.">
   <title>Mes documents · La Cazotte</title>
-  <link rel="stylesheet" href="styles.css?v=5">
-  <link rel="stylesheet" href="password.css?v=4">
+  <link rel="stylesheet" href="styles.css?v=6">
+  <link rel="stylesheet" href="password.css?v=5">
 </head>
 <body>
   <section class="setup-screen" id="setup-screen" hidden>
@@ -21,7 +21,7 @@
 
   <section class="auth-screen" id="auth-screen" hidden>
     <div class="auth-brand">
-      <div><span class="logo large">LC</span><p class="eyebrow light">EPLEFPA La Cazotte · Saint-Affrique</p><h1>Votre dossier.<br><em>Simplement.</em></h1><p>Déposez vos pièces, suivez leur validation et échangez avec le secrétariat depuis un espace unique.</p><div class="auth-benefits"><span>✓ Suivi en temps réel</span><span>✓ Documents sécurisés</span><span>✓ Support direct</span></div></div>
+      <div><span class="logo large">LC</span><p class="eyebrow light">EPLEFPA La Cazotte · Saint-Affrique</p><h1>Mes démarches administratives</h1><p>Un espace unique pour transmettre les documents demandés par l’établissement et suivre l’avancement de votre dossier.</p><div class="auth-benefits"><span><b>1</b> Je consulte les pièces demandées</span><span><b>2</b> Je dépose mes documents</span><span><b>3</b> Je suis leur validation</span></div></div>
       <small><i></i> Portail réservé aux apprenants et personnels autorisés</small>
     </div>
     <div class="auth-panel">
@@ -58,7 +58,7 @@
       <header class="topbar"><button class="menu" id="menu-button" aria-label="Ouvrir le menu">☰</button><span class="breadcrumb">Espace personnel <b>/</b> <strong id="page-label">Tableau de bord</strong></span><div class="top-actions"><span class="secure-chip">● Connexion sécurisée</span><div class="top-user"><span id="top-name"></span><span class="avatar" id="top-initials"></span></div></div></header>
       <main>
         <section class="view active" id="view-dashboard">
-          <div class="hero"><div class="hero-copy"><p class="eyebrow" id="today"></p><h1>Bonjour <span id="welcome-name"></span><span class="hero-dot">.</span></h1><p id="dashboard-message">Chargement de votre dossier…</p></div><div class="hero-actions student-only"><div class="completion"><div><span>Progression du dossier</span><strong id="completion-percent">0 %</strong></div><span class="completion-track"><i id="completion-bar"></i></span></div><button class="primary primary-light" data-view="documents">Déposer un document <span>→</span></button></div></div>
+          <div class="hero"><div class="hero-copy"><p class="eyebrow" id="today"></p><h1>Bonjour <span id="welcome-name"></span></h1><p id="dashboard-message">Chargement de votre dossier…</p></div><div class="hero-actions student-only"><div class="completion"><div><span>État d’avancement du dossier</span><strong id="completion-percent">0 %</strong></div><span class="completion-track"><i id="completion-bar"></i></span></div><button class="primary" data-view="documents">Accéder à mes documents <span>→</span></button></div></div>
           <div class="stats"><article><span class="stat-icon green-bg">✓</span><div><strong id="stat-valid">0</strong><small>Documents validés</small></div></article><article><span class="stat-icon orange-bg">↑</span><div><strong id="stat-pending">0</strong><small>Documents à déposer</small></div></article><article><span class="stat-icon blue-bg">◷</span><div><strong id="stat-review">0</strong><small>En cours de vérification</small></div></article></div>
           <div class="grid"><section class="panel"><div class="panel-head"><div><p class="eyebrow orange">Prochaine étape</p><h2>Documents à traiter</h2></div><button class="link-button" data-view="documents">Voir le dossier <span>→</span></button></div><div id="dashboard-documents"></div></section><aside class="panel contact-card"><span class="contact-icon">✉</span><p class="eyebrow">Une question ?</p><h2>Le secrétariat vous répond</h2><p>Échangez directement avec l’établissement, sans quitter votre espace.</p><button class="secondary full" data-view="messages">Écrire un message <span>→</span></button></aside></div>
         </section>
@@ -104,6 +104,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=3"></script>
-  <script src="app.js?v=8"></script>
+  <script src="app.js?v=9"></script>
 </body>
 </html>
