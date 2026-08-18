@@ -633,12 +633,14 @@
       var t = item.document_types || {};
       var actions = '<button class="action" data-admin-download="' + item.id + '">Voir</button>';
       if (item.status === "submitted") actions += '<button class="action approve" data-admin-approve="' + item.id + '">Valider</button><button class="action reject" data-admin-reject="' + item.id + '">Refuser</button>';
+      actions += '<button class="action delete" data-admin-delete="' + item.id + '">Supprimer</button>';
       return "<tr><td data-label=\"Apprenant\"><strong>" + escapeHtml(p.full_name || "Compte supprimé") + "</strong><small>" + escapeHtml(p.formation || "") + "</small></td><td data-label=\"Document\"><strong>" + escapeHtml(t.title || "Document") + "</strong><small>" + escapeHtml(item.original_name) + "</small></td><td data-label=\"Déposé le\">" + formatDateTime(item.submitted_at) + '</td><td data-label="Statut"><span class="status ' + item.status + '">' + statusText(item.status) + '</span></td><td data-label="Actions"><div class="table-actions">' + actions + "</div></td></tr>";
     }).join("");
     $("#admin-empty").hidden = filtered.length > 0;
     $$("[data-admin-download]").forEach(function (b) { b.onclick = function () { downloadSubmission(all.find(function (i) { return i.id === b.dataset.adminDownload; })); }; });
     $$("[data-admin-approve]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminApprove, "approved"); }; });
     $$("[data-admin-reject]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminReject, "rejected"); }; });
+    $$("[data-admin-delete]").forEach(function (b) { b.onclick = function () { adminDeleteSubmission(b.dataset.adminDelete, b); }; });
     $$("[data-open-student]").forEach(function (b) { b.onclick = function () { openStudentSheet(b.dataset.openStudent); }; });
   }
   function renderAdminRequests() {
@@ -648,12 +650,13 @@
       var statusLabel = type.active ? "Active" : "Désactivée";
       var toggleLabel = type.active ? "Désactiver" : "Réactiver";
       var safeTitle = escapeHtml(type.title);
-      return '<tr class="' + (type.active ? "" : "request-inactive") + '"><td data-label="Document"><strong>' + safeTitle + '</strong><small>' + escapeHtml(type.category || "Sans catégorie") + '</small></td><td data-label="Formation">' + escapeHtml(type.formation || "Toutes les formations") + '</td><td data-label="Échéance">' + formatDate(type.deadline) + '</td><td data-label="Statut"><span class="status ' + statusClass + '">' + statusLabel + '</span></td><td data-label="Actions"><div class="table-actions"><button class="action" type="button" data-edit-request="' + type.id + '" aria-label="Modifier la demande ' + safeTitle + '">Modifier</button><button class="action" type="button" data-duplicate-request="' + type.id + '" aria-label="Dupliquer la demande ' + safeTitle + '">Dupliquer</button><button class="action ' + (type.active ? "delete" : "approve") + '" type="button" data-toggle-request="' + type.id + '">' + toggleLabel + '</button></div></td></tr>';
+      return '<tr class="' + (type.active ? "" : "request-inactive") + '"><td data-label="Document"><strong>' + safeTitle + '</strong><small>' + escapeHtml(type.category || "Sans catégorie") + '</small></td><td data-label="Formation">' + escapeHtml(type.formation || "Toutes les formations") + '</td><td data-label="Échéance">' + formatDate(type.deadline) + '</td><td data-label="Statut"><span class="status ' + statusClass + '">' + statusLabel + '</span></td><td data-label="Actions"><div class="table-actions"><button class="action" type="button" data-edit-request="' + type.id + '" aria-label="Modifier la demande ' + safeTitle + '">Modifier</button><button class="action" type="button" data-duplicate-request="' + type.id + '" aria-label="Dupliquer la demande ' + safeTitle + '">Dupliquer</button><button class="action ' + (type.active ? "delete" : "approve") + '" type="button" data-toggle-request="' + type.id + '">' + toggleLabel + '</button><button class="action delete" type="button" data-delete-request="' + type.id + '" aria-label="Supprimer définitivement la demande ' + safeTitle + '">Supprimer</button></div></td></tr>';
     }).join("");
     $("#admin-requests-empty").hidden = adminDocumentTypes.length > 0;
     $$("[data-edit-request]", body).forEach(function (button) { button.onclick = function () { openRequestModal("edit", button.dataset.editRequest); }; });
     $$("[data-duplicate-request]", body).forEach(function (button) { button.onclick = function () { openRequestModal("duplicate", button.dataset.duplicateRequest); }; });
     $$("[data-toggle-request]", body).forEach(function (button) { button.onclick = function () { toggleRequest(button.dataset.toggleRequest, button); }; });
+    $$("[data-delete-request]", body).forEach(function (button) { button.onclick = function () { deleteRequest(button.dataset.deleteRequest, button); }; });
   }
   function openStudentSheet(studentId) {
     var student = adminStudents.find(function (item) { return item.id === studentId; });
@@ -668,7 +671,7 @@
     $("#student-modal-documents").innerHTML = summary.required.length ? summary.required.map(function (type) {
       var submission = summary.submissions.find(function (item) { return item.document_type_id === type.id; });
       var status = submission ? submission.status : "missing";
-      return '<article><div><strong>' + escapeHtml(type.title) + '</strong><small>' + (submission ? escapeHtml(submission.original_name) + " · " + formatBytes(submission.size_bytes) : "Aucun fichier transmis") + '</small></div><span class="status ' + status + '">' + statusText(status) + '</span>' + (submission ? '<button class="action" data-sheet-download="' + submission.id + '">Voir</button>' : "") + '</article>';
+      return '<article><div><strong>' + escapeHtml(type.title) + '</strong><small>' + (submission ? escapeHtml(submission.original_name) + " · " + formatBytes(submission.size_bytes) : "Aucun fichier transmis") + '</small></div><span class="status ' + status + '">' + statusText(status) + '</span>' + (submission ? '<button class="action" data-sheet-download="' + submission.id + '">Voir</button><button class="action delete" data-sheet-delete="' + submission.id + '">Supprimer</button>' : "") + '</article>';
     }).join("") : '<p class="muted-text">Aucun document demandé pour cette formation.</p>';
     var history = submissionHistory.filter(function (item) { return item.user_id === student.id; });
     var historyLabels = {submitted:"Document déposé", replaced:"Document remplacé", approved:"Document validé", rejected:"Correction demandée", deleted:"Document supprimé"};
@@ -677,6 +680,7 @@
       return '<article><i></i><div><strong>' + escapeHtml(historyLabels[item.action] || item.action) + '</strong><p>' + escapeHtml(title) + (item.note ? " · " + escapeHtml(item.note) : "") + '</p><small>' + formatDateTime(item.created_at) + (item.actor && item.actor.full_name ? " · " + escapeHtml(item.actor.full_name) : "") + '</small></div></article>';
     }).join("") : '<p class="muted-text">Aucune action enregistrée pour le moment.</p>';
     $$("[data-sheet-download]").forEach(function (button) { button.onclick = function () { downloadSubmission(adminSubmissions.find(function (item) { return item.id === button.dataset.sheetDownload; })); }; });
+    $$("[data-sheet-delete]").forEach(function (button) { button.onclick = function () { adminDeleteSubmission(button.dataset.sheetDelete, button); }; });
     openModal("#student-modal", "#student-message-button");
   }
   async function sendStudentReminder() {
@@ -727,6 +731,24 @@
     ]);
     showToast(status === "approved" ? "Document validé." : "Correction demandée.");
     await loadAdmin();
+  }
+  async function adminDeleteSubmission(id, button) {
+    if (profile.role !== "admin") return;
+    var item = adminSubmissions.find(function (submission) { return submission.id === id; });
+    if (!item) return showToast("Ce dépôt n'est plus disponible.", true);
+    var studentName = item.profiles && item.profiles.full_name || "cet élève";
+    if (!window.confirm("Supprimer définitivement le fichier « " + item.original_name + " » déposé par " + studentName + " ? L'élève pourra déposer un nouveau document.")) return;
+    button.disabled = true;
+    var deleted = await client.from("submissions").delete().eq("id", id).select("id").maybeSingle();
+    if (deleted.error || !deleted.data) {
+      button.disabled = false;
+      return showToast(deleted.error ? friendlyError(deleted.error) : "Ce dépôt ne peut pas être supprimé.", true);
+    }
+    await client.from("submission_history").insert({submission_id:null, user_id:item.user_id, document_type_id:item.document_type_id, original_name:item.original_name, action:"deleted", note:"Dépôt supprimé par l'administration", actor_id:session.user.id});
+    var removed = item.storage_path ? await client.storage.from("administrative-documents").remove([item.storage_path]) : {error:null};
+    if (!$("#student-modal").hidden) closeModals();
+    await loadAdmin();
+    showToast(removed.error ? "Le dépôt est supprimé, mais le nettoyage du fichier doit être vérifié." : "Le dépôt de l'élève a été supprimé.", !!removed.error);
   }
   function openRequestModal(mode, requestId) {
     var form = $("#request-form");
@@ -786,6 +808,26 @@
     if (result.error) return showToast(friendlyError(result.error), true);
     showToast(nextActive ? "Demande réactivée." : "Demande désactivée.");
     await loadDocuments(); await loadAdmin();
+  }
+  async function deleteRequest(id, button) {
+    if (profile.role !== "admin") return;
+    var item = adminDocumentTypes.find(function (type) { return type.id === id; });
+    if (!item) return showToast("Cette demande n'est plus disponible.", true);
+    var linked = await client.from("submissions").select("id,storage_path").eq("document_type_id", id);
+    if (linked.error) return showToast(friendlyError(linked.error), true);
+    var deposits = linked.data || [];
+    var warning = deposits.length ? " Cette action supprimera également " + deposits.length + " dépôt" + (deposits.length > 1 ? "s" : "") + " d'élève et les fichiers correspondants." : "";
+    if (!window.confirm("Supprimer définitivement la demande « " + item.title + " » ?" + warning + " Cette action est irréversible.")) return;
+    button.disabled = true;
+    var deleted = await client.from("document_types").delete().eq("id", id).select("id").maybeSingle();
+    if (deleted.error || !deleted.data) {
+      button.disabled = false;
+      return showToast(deleted.error ? friendlyError(deleted.error) : "Cette demande ne peut pas être supprimée.", true);
+    }
+    var paths = deposits.map(function (submission) { return submission.storage_path; }).filter(Boolean);
+    var removed = paths.length ? await client.storage.from("administrative-documents").remove(paths) : {error:null};
+    await loadDocuments(); await loadAdmin();
+    showToast(removed.error ? "La demande et les dépôts sont supprimés, mais le nettoyage des fichiers doit être vérifié." : "La demande et ses éventuels dépôts ont été supprimés.", !!removed.error);
   }
 
   function setupRealtime() {

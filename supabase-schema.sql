@@ -31,7 +31,7 @@ create table if not exists public.document_types (
 create table if not exists public.submissions (
   id uuid primary key default gen_random_uuid(),
   user_id uuid not null references public.profiles(id) on delete cascade,
-  document_type_id uuid not null references public.document_types(id) on delete restrict,
+  document_type_id uuid not null references public.document_types(id) on delete cascade,
   storage_path text not null,
   original_name text not null,
   mime_type text not null check (mime_type in ('application/pdf', 'image/jpeg', 'image/png')),
@@ -43,6 +43,13 @@ create table if not exists public.submissions (
   reviewed_by uuid references public.profiles(id) on delete set null,
   unique (user_id, document_type_id)
 );
+
+-- Met à niveau les projets déjà créés : supprimer une demande supprime aussi
+-- ses lignes de dépôt, tandis que les fichiers Storage sont nettoyés par l'application.
+alter table public.submissions drop constraint if exists submissions_document_type_id_fkey;
+alter table public.submissions
+  add constraint submissions_document_type_id_fkey
+  foreign key (document_type_id) references public.document_types(id) on delete cascade;
 
 create table if not exists public.messages (
   id uuid primary key default gen_random_uuid(),
