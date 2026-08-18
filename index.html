@@ -6,8 +6,8 @@
   <meta name="theme-color" content="#123d2d">
   <meta name="description" content="Portail administratif sécurisé de l'EPLEFPA La Cazotte.">
   <title>Mes documents · La Cazotte</title>
-  <link rel="stylesheet" href="styles.css?v=4">
-  <link rel="stylesheet" href="password.css?v=3">
+  <link rel="stylesheet" href="styles.css?v=5">
+  <link rel="stylesheet" href="password.css?v=4">
 </head>
 <body>
   <section class="setup-screen" id="setup-screen" hidden>
@@ -21,8 +21,8 @@
 
   <section class="auth-screen" id="auth-screen" hidden>
     <div class="auth-brand">
-      <div><span class="logo large">LC</span><p class="eyebrow light">EPLEFPA La Cazotte · Saint-Affrique</p><h1>Vos démarches administratives, au même endroit.</h1><p>Déposez vos pièces, suivez leur validation et échangez avec le secrétariat dans un espace sécurisé.</p></div>
-      <small>Portail réservé aux apprenants et personnels autorisés.</small>
+      <div><span class="logo large">LC</span><p class="eyebrow light">EPLEFPA La Cazotte · Saint-Affrique</p><h1>Votre dossier.<br><em>Simplement.</em></h1><p>Déposez vos pièces, suivez leur validation et échangez avec le secrétariat depuis un espace unique.</p><div class="auth-benefits"><span>✓ Suivi en temps réel</span><span>✓ Documents sécurisés</span><span>✓ Support direct</span></div></div>
+      <small><i></i> Portail réservé aux apprenants et personnels autorisés</small>
     </div>
     <div class="auth-panel">
       <div class="auth-box">
@@ -49,17 +49,18 @@
 
   <div class="app" id="app" hidden>
     <aside class="sidebar" id="sidebar">
-      <a class="brand" href="#dashboard"><span class="logo">LC</span><span><strong>La Cazotte</strong><small>Mes documents</small></span></a>
-      <nav><button class="nav-item student-only active" data-view="dashboard"><span>⌂</span>Tableau de bord</button><button class="nav-item student-only" data-view="documents"><span>▤</span>Mes documents <b id="pending-badge" hidden></b></button><button class="nav-item" data-view="messages"><span>✉</span>Support</button><button class="nav-item" data-view="announcements"><span>◇</span>Annonces <b id="announcement-badge" hidden></b></button><button class="nav-item" data-view="profile"><span>○</span>Mon profil</button><button class="nav-item admin-only" data-view="admin" hidden><span>⚙</span>Secrétariat</button></nav>
+      <a class="brand" href="#dashboard"><span class="logo">LC</span><span><strong>La Cazotte</strong><small>Portail administratif</small></span></a>
+      <button class="sidebar-close" id="sidebar-close" aria-label="Fermer le menu">×</button>
+      <nav><p class="nav-label">Mon espace</p><button class="nav-item student-only active" data-view="dashboard"><span>⌂</span>Accueil</button><button class="nav-item student-only" data-view="documents"><span>▤</span>Mes documents <b id="pending-badge" hidden></b></button><button class="nav-item admin-only" data-view="admin" hidden><span>⚙</span>Secrétariat</button><p class="nav-label nav-label-secondary">Communication</p><button class="nav-item" data-view="messages"><span>✉</span>Support</button><button class="nav-item" data-view="announcements"><span>◇</span>Annonces <b id="announcement-badge" hidden></b></button><button class="nav-item" data-view="profile"><span>○</span>Mon profil</button></nav>
       <div class="sidebar-foot"><div class="user-mini"><span class="avatar" id="side-initials"></span><span><strong id="side-name"></strong><small id="side-role"></small></span></div><button class="logout" id="logout-button">Se déconnecter</button></div>
-    </aside>
+    </aside><button class="sidebar-backdrop" id="sidebar-backdrop" aria-label="Fermer le menu" tabindex="-1"></button>
     <div class="page">
-      <header class="topbar"><button class="menu" id="menu-button" aria-label="Ouvrir le menu">☰</button><span class="breadcrumb">Portail administratif <b>/</b> <strong id="page-label">Tableau de bord</strong></span><div class="top-user"><span id="top-name"></span><span class="avatar" id="top-initials"></span></div></header>
+      <header class="topbar"><button class="menu" id="menu-button" aria-label="Ouvrir le menu">☰</button><span class="breadcrumb">Espace personnel <b>/</b> <strong id="page-label">Tableau de bord</strong></span><div class="top-actions"><span class="secure-chip">● Connexion sécurisée</span><div class="top-user"><span id="top-name"></span><span class="avatar" id="top-initials"></span></div></div></header>
       <main>
         <section class="view active" id="view-dashboard">
-          <div class="hero"><div><p class="eyebrow green" id="today"></p><h1>Bonjour <span id="welcome-name"></span></h1><p id="dashboard-message">Chargement de votre dossier…</p></div><button class="primary student-only" data-view="documents">Déposer un document</button></div>
+          <div class="hero"><div class="hero-copy"><p class="eyebrow" id="today"></p><h1>Bonjour <span id="welcome-name"></span><span class="hero-dot">.</span></h1><p id="dashboard-message">Chargement de votre dossier…</p></div><div class="hero-actions student-only"><div class="completion"><div><span>Progression du dossier</span><strong id="completion-percent">0 %</strong></div><span class="completion-track"><i id="completion-bar"></i></span></div><button class="primary primary-light" data-view="documents">Déposer un document <span>→</span></button></div></div>
           <div class="stats"><article><span class="stat-icon green-bg">✓</span><div><strong id="stat-valid">0</strong><small>Documents validés</small></div></article><article><span class="stat-icon orange-bg">↑</span><div><strong id="stat-pending">0</strong><small>Documents à déposer</small></div></article><article><span class="stat-icon blue-bg">◷</span><div><strong id="stat-review">0</strong><small>En cours de vérification</small></div></article></div>
-          <div class="grid"><section class="panel"><div class="panel-head"><div><p class="eyebrow orange">À traiter</p><h2>Documents attendus</h2></div><button class="link-button" data-view="documents">Voir tout →</button></div><div id="dashboard-documents"></div></section><aside class="panel contact-card"><span class="contact-icon">✉</span><p class="eyebrow">Besoin d’aide ?</p><h2>Contactez le secrétariat</h2><p>Posez une question directement depuis votre espace sécurisé.</p><button class="secondary full" data-view="messages">Ouvrir la messagerie</button></aside></div>
+          <div class="grid"><section class="panel"><div class="panel-head"><div><p class="eyebrow orange">Prochaine étape</p><h2>Documents à traiter</h2></div><button class="link-button" data-view="documents">Voir le dossier <span>→</span></button></div><div id="dashboard-documents"></div></section><aside class="panel contact-card"><span class="contact-icon">✉</span><p class="eyebrow">Une question ?</p><h2>Le secrétariat vous répond</h2><p>Échangez directement avec l’établissement, sans quitter votre espace.</p><button class="secondary full" data-view="messages">Écrire un message <span>→</span></button></aside></div>
         </section>
 
         <section class="view" id="view-documents">
@@ -103,6 +104,6 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=3"></script>
-  <script src="app.js?v=7"></script>
+  <script src="app.js?v=8"></script>
 </body>
 </html>

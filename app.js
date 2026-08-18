@@ -158,6 +158,7 @@
     $$(".nav-item").forEach(function (button) { button.classList.toggle("active", button.dataset.view === view); });
     $("#page-label").textContent = labels[view];
     $("#sidebar").classList.remove("open");
+    $("#sidebar-backdrop").classList.remove("show");
     location.hash = view;
     window.scrollTo({top:0, behavior:"smooth"});
   }
@@ -220,6 +221,9 @@
     $("#stat-valid").textContent = valid;
     $("#stat-pending").textContent = pending;
     $("#stat-review").textContent = review;
+    var progress = items.length ? Math.round(((valid + review) / items.length) * 100) : 100;
+    $("#completion-percent").textContent = progress + " %";
+    $("#completion-bar").style.width = progress + "%";
     $("#dashboard-message").textContent = items.length === 0 ? "Aucun document ne vous est demandé pour le moment." :
       pending ? "Votre dossier comporte " + pending + " pièce" + (pending > 1 ? "s" : "") + " à transmettre ou corriger." :
       review ? "Toutes vos pièces ont été transmises. Certaines sont en cours de vérification." : "Votre dossier administratif est complet.";
@@ -547,7 +551,13 @@
   });
   $("#logout-button").addEventListener("click", function () { client.auth.signOut(); });
   $$(".nav-item, [data-view]").forEach(function (button) { button.addEventListener("click", function () { navigate(button.dataset.view); }); });
-  $("#menu-button").addEventListener("click", function () { $("#sidebar").classList.toggle("open"); });
+  function toggleSidebar(open) {
+    $("#sidebar").classList.toggle("open", open);
+    $("#sidebar-backdrop").classList.toggle("show", open);
+  }
+  $("#menu-button").addEventListener("click", function () { toggleSidebar(!$("#sidebar").classList.contains("open")); });
+  $("#sidebar-close").addEventListener("click", function () { toggleSidebar(false); });
+  $("#sidebar-backdrop").addEventListener("click", function () { toggleSidebar(false); });
   $("#document-search").addEventListener("input", renderDocuments);
   $$(".filter").forEach(function (button) { button.addEventListener("click", function () { currentFilter = button.dataset.filter; $$(".filter").forEach(function (b) { b.classList.toggle("active", b === button); }); renderDocuments(); }); });
   $("#upload-file").addEventListener("change", function () { $("#upload-file-name").textContent = this.files[0] ? this.files[0].name : "Sélectionner un fichier"; });
