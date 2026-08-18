@@ -170,6 +170,7 @@
     $("#sidebar").classList.remove("open");
     $("#sidebar-backdrop").classList.remove("show");
     location.hash = view;
+    if (view === "messages") setTimeout(function () { renderConversation(); }, 0);
     window.scrollTo({top:0, behavior:"smooth"});
   }
 
@@ -410,7 +411,8 @@
     $("#message-content").disabled = !selected || closed;
     $("button[type=submit]", $("#message-form")).disabled = !selected || closed;
     $("#message-content").placeholder = closed ? "Cette conversation a été clôturée par le secrétariat." : "Écrivez votre message…";
-    var unreadIds = messages.filter(function (message) { return message.recipient_id === session.user.id && !message.read_at; }).map(function (message) { return message.id; });
+    var conversationIsActuallyOpen = $("#view-messages").classList.contains("active") && document.visibilityState === "visible";
+    var unreadIds = conversationIsActuallyOpen ? messages.filter(function (message) { return message.recipient_id === session.user.id && !message.read_at; }).map(function (message) { return message.id; }) : [];
     if (unreadIds.length) {
       await client.from("messages").update({read_at:new Date().toISOString()}).in("id", unreadIds);
       allMessages.forEach(function (message) { if (unreadIds.includes(message.id)) message.read_at = new Date().toISOString(); });
@@ -765,6 +767,7 @@
   $$("[data-close-modal]").forEach(function (button) { button.addEventListener("click", closeModals); });
   $$(".modal-wrap").forEach(function (modal) { modal.addEventListener("click", function (event) { if (event.target === modal) closeModals(); }); });
   document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeModals(); });
+  document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible" && $("#view-messages").classList.contains("active")) renderConversation(); });
 
   start().catch(function (error) {
     $("#setup-screen").hidden = false;
