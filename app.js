@@ -13,6 +13,11 @@
   var adminStudents = [];
   var allMessages = [];
   var announcements = [];
+  var submissionHistory = [];
+  var conversationThreads = [];
+  var notifications = [];
+  var selectedAdminStudent = null;
+  var currentPreviewUrl = null;
   var liveChannel = null;
   var currentFilter = "all";
   var toastTimer;
@@ -36,6 +41,11 @@
   function formatDateTime(value) {
     if (!value) return "—";
     return new Intl.DateTimeFormat("fr-FR", {day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"}).format(new Date(value));
+  }
+  function formatBytes(value) {
+    if (!value) return "0 Ko";
+    if (value < 1024 * 1024) return Math.ceil(value / 1024) + " Ko";
+    return (value / (1024 * 1024)).toFixed(1).replace(".", ",") + " Mo";
   }
   function showToast(message, error) {
     var toast = $("#toast");
@@ -122,7 +132,7 @@
     $("#auth-screen").hidden = true;
     $("#app").hidden = false;
     fillIdentity();
-    await Promise.all([loadDocuments(), loadMessages(), loadAnnouncements()]);
+    await Promise.all([loadDocuments(), loadMessages(), loadAnnouncements(), loadNotifications()]);
     if (profile.role === "admin") await loadAdmin();
     setupRealtime();
     var requestedView = location.hash.slice(1);
@@ -172,6 +182,10 @@
     var submissionResult = await client.from("submissions").select("*").eq("user_id", session.user.id);
     if (submissionResult.error) return showToast(friendlyError(submissionResult.error), true);
     submissions = submissionResult.data || [];
+    if (profile.role !== "admin") {
+      var historyResult = await client.from("submission_history").select("*").eq("user_id", session.user.id).order("created_at", {ascending:false});
+      if (!historyResult.error) submissionHistory = historyResult.data || [];
+    }
     renderDocuments();
     renderDashboard();
   }
@@ -192,14 +206,17 @@
     var action = item.status === "missing" ? "Déposer" : item.status === "rejected" ? "Corriger" : "Télécharger";
     var canDelete = submission && (item.status === "submitted" || item.status === "rejected");
     var deleteButton = canDelete ? '<button class="action delete" data-delete-submission="' + submission.id + '">Supprimer</button>' : "";
-    var detail = submission ? escapeHtml(submission.original_name) : escapeHtml(type.category || "Document administratif");
+    var detail = submission ? escapeHtml(submission.original_name) + " · " + formatBytes(submission.size_bytes) + " · déposé le " + formatDateTime(submission.submitted_at) : escapeHtml(type.category || "Document administratif");
     var rejected = item.status === "rejected" && submission.rejection_reason ?
       '<small class="reject-reason">Motif : ' + escapeHtml(submission.rejection_reason) + "</small>" : "";
+    var historyLabels = {submitted:"Déposé", replaced:"Remplacé", approved:"Validé", rejected:"Correction demandée", deleted:"Supprimé"};
+    var historyItems = submissionHistory.filter(function (entry) { return entry.document_type_id === type.id; }).slice(0, 6);
+    var historyBlock = !dashboard && historyItems.length ? '<details class="doc-history"><summary>Voir l’historique (' + historyItems.length + ')</summary><div>' + historyItems.map(function (entry) { return '<p><strong>' + escapeHtml(historyLabels[entry.action] || entry.action) + '</strong><span>' + formatDateTime(entry.created_at) + (entry.note ? " · " + escapeHtml(entry.note) : "") + '</span></p>'; }).join("") + '</div></details>' : "";
     return '<article class="doc-row ' + (dashboard ? "dashboard-row" : "") + '">' +
       '<div class="doc-main"><span class="file-icon">' + (item.status === "approved" ? "✓" : "DOC") + '</span><div><strong>' + escapeHtml(type.title) + '</strong><small>' + detail + '</small>' + rejected + '</div></div>' +
       '<span class="deadline">' + (type.deadline ? "Avant le " + formatDate(type.deadline) : "Sans échéance") + '</span>' +
       (dashboard ? "" : '<span class="status ' + item.status + '">' + statusText(item.status) + '</span>') +
-      '<div class="doc-actions"><button class="action" data-doc-id="' + type.id + '" data-doc-status="' + item.status + '">' + action + "</button>" + deleteButton + "</div></article>";
+      '<div class="doc-actions"><button class="action" data-doc-id="' + type.id + '" data-doc-status="' + item.status + '">' + action + "</button>" + deleteButton + "</div>" + historyBlock + "</article>";
   }
   function renderDocuments() {
     var search = ($("#document-search").value || "").toLowerCase();
@@ -224,6 +241,13 @@
     var progress = items.length ? Math.round(((valid + review) / items.length) * 100) : 100;
     $("#completion-percent").textContent = progress + " %";
     $("#completion-bar").style.width = progress + "%";
+    var profileComplete = !!(profile.full_name && profile.student_number && profile.formation);
+    $("#step-profile").classList.toggle("done", profileComplete);
+    $("#step-documents").classList.toggle("done", items.length > 0 && pending === 0);
+    $("#step-review").classList.toggle("done", items.length > 0 && review === 0 && pending === 0);
+    $("#step-complete").classList.toggle("done", items.length > 0 && valid === items.length);
+    var activeStep = !profileComplete ? "#step-profile" : pending ? "#step-documents" : review ? "#step-review" : "#step-complete";
+    $$(".journey li").forEach(function (step) { step.classList.toggle("active", step.matches(activeStep)); });
     $("#dashboard-message").textContent = items.length === 0 ? "Aucun document ne vous est demandé pour le moment." :
       pending ? "Votre dossier comporte " + pending + " pièce" + (pending > 1 ? "s" : "") + " à transmettre ou corriger." :
       review ? "Toutes vos pièces ont été transmises. Certaines sont en cours de vérification." : "Votre dossier administratif est complet.";
@@ -261,6 +285,26 @@
     $("#upload-form").reset();
     $("#upload-file-name").textContent = "Sélectionner un fichier";
     $("#upload-progress").hidden = true;
+    $("#upload-preview").hidden = true;
+    $("#upload-preview-image").hidden = true;
+    if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+    currentPreviewUrl = null;
+  }
+  function previewUploadFile(file) {
+    var preview = $("#upload-preview");
+    var image = $("#upload-preview-image");
+    if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
+    currentPreviewUrl = null;
+    if (!file) { preview.hidden = true; image.hidden = true; return; }
+    $("#upload-preview-name").textContent = file.name;
+    $("#upload-preview-meta").textContent = (file.type === "application/pdf" ? "Document PDF" : "Image") + " · " + formatBytes(file.size);
+    preview.hidden = false;
+    image.hidden = true;
+    if (file.type.indexOf("image/") === 0) {
+      currentPreviewUrl = URL.createObjectURL(file);
+      image.src = currentPreviewUrl;
+      image.hidden = false;
+    }
   }
   async function uploadDocument(event) {
     event.preventDefault();
@@ -282,12 +326,14 @@
     }
     var existing = submissions.find(function (item) { return item.document_type_id === typeId; });
     var payload = {user_id:session.user.id, document_type_id:typeId, storage_path:path, original_name:file.name, mime_type:file.type, size_bytes:file.size, status:"submitted", rejection_reason:null, submitted_at:new Date().toISOString(), reviewed_at:null, reviewed_by:null};
-    var save = existing ? await client.from("submissions").update(payload).eq("id", existing.id) : await client.from("submissions").insert(payload);
+    var save = existing ? await client.from("submissions").update(payload).eq("id", existing.id).select("*").single() : await client.from("submissions").insert(payload).select("*").single();
     if (save.error) {
       await client.storage.from("administrative-documents").remove([path]);
       setBusy(form, false); $("#upload-progress").hidden = true;
       return showToast(friendlyError(save.error), true);
     }
+    var savedSubmission = save.data;
+    await client.from("submission_history").insert({submission_id:savedSubmission.id, user_id:session.user.id, document_type_id:typeId, original_name:file.name, action:existing ? "replaced" : "submitted", note:existing ? "Document remplacé par l'élève" : "Premier dépôt", actor_id:session.user.id});
     if (existing && existing.storage_path) await client.storage.from("administrative-documents").remove([existing.storage_path]);
     setBusy(form, false); closeModals();
     showToast("Votre document a bien été transmis.");
@@ -308,6 +354,7 @@
       button.disabled = false;
       return showToast(deleted.error ? friendlyError(deleted.error) : "Ce document ne peut plus être supprimé.", true);
     }
+    await client.from("submission_history").insert({submission_id:null, user_id:submission.user_id, document_type_id:submission.document_type_id, original_name:submission.original_name, action:"deleted", note:"Dépôt retiré par l'élève", actor_id:session.user.id});
     var removed = await client.storage.from("administrative-documents").remove([submission.storage_path]);
     if (removed.error) showToast("Le dépôt a été retiré, mais le nettoyage du fichier devra être vérifié par le secrétariat.", true);
     else showToast("Document supprimé. Vous pouvez maintenant déposer le bon fichier.");
@@ -322,8 +369,19 @@
     if (staff.error) return showToast(friendlyError(staff.error), true);
     var select = $("#message-recipient");
     var recipients = (staff.data || []).filter(function (p) { return p.id !== session.user.id; });
+    var dataResults = await Promise.all([
+      client.from("messages").select("*,sender:profiles!messages_sender_id_fkey(full_name),recipient:profiles!messages_recipient_id_fkey(full_name)").order("created_at"),
+      client.from("conversation_threads").select("*")
+    ]);
+    if (dataResults[0].error) return showToast(friendlyError(dataResults[0].error), true);
+    allMessages = dataResults[0].data || [];
+    conversationThreads = dataResults[1].error ? [] : (dataResults[1].data || []);
+    var unreadTotal = allMessages.filter(function (message) { return message.recipient_id === session.user.id && !message.read_at; }).length;
+    $("#message-badge").hidden = unreadTotal === 0;
+    $("#message-badge").textContent = unreadTotal;
     select.innerHTML = '<option value="">' + (profile.role === "admin" ? "Choisir un élève" : "Support administratif") + '</option>' + recipients.map(function (p) {
-      return '<option value="' + p.id + '">' + escapeHtml(p.full_name) + (p.role === "admin" ? " · Support" : " · " + escapeHtml(p.formation || "Apprenant")) + "</option>";
+      var unread = allMessages.filter(function (message) { return message.sender_id === p.id && message.recipient_id === session.user.id && !message.read_at; }).length;
+      return '<option value="' + p.id + '">' + escapeHtml(p.full_name) + (p.role === "admin" ? " · Support" : " · " + escapeHtml(p.formation || "Apprenant")) + (unread ? " · " + unread + " non lu" + (unread > 1 ? "s" : "") : "") + "</option>";
     }).join("");
     if (recipients.some(function (p) { return p.id === previousRecipient; })) select.value = previousRecipient;
     else if (profile.role !== "admin" && recipients.length) select.value = recipients[0].id;
@@ -334,22 +392,37 @@
     select.disabled = noRecipient;
     $("#message-content").disabled = noRecipient;
     $("button[type=submit]", $("#message-form")).disabled = noRecipient;
-    var result = await client.from("messages").select("*,sender:profiles!messages_sender_id_fkey(full_name),recipient:profiles!messages_recipient_id_fkey(full_name)").order("created_at");
-    if (result.error) return showToast(friendlyError(result.error), true);
-    allMessages = result.data || [];
-    renderConversation();
+    await renderConversation();
   }
-  function renderConversation() {
+  async function renderConversation() {
     var selected = $("#message-recipient").value;
     var messages = selected ? allMessages.filter(function (message) {
       return (message.sender_id === session.user.id && message.recipient_id === selected) ||
         (message.sender_id === selected && message.recipient_id === session.user.id);
     }) : [];
+    var studentId = profile.role === "admin" ? selected : session.user.id;
+    var thread = conversationThreads.find(function (item) { return item.student_id === studentId; });
+    var closed = !!(thread && thread.status === "closed");
+    $("#thread-status").textContent = closed ? "Conversation clôturée" : "Conversation ouverte";
+    $("#thread-status").classList.toggle("closed", closed);
+    $("#toggle-thread-button").hidden = profile.role !== "admin" || !selected;
+    $("#toggle-thread-button").textContent = closed ? "Réouvrir" : "Clôturer";
+    $("#message-content").disabled = !selected || closed;
+    $("button[type=submit]", $("#message-form")).disabled = !selected || closed;
+    $("#message-content").placeholder = closed ? "Cette conversation a été clôturée par le secrétariat." : "Écrivez votre message…";
+    var unreadIds = messages.filter(function (message) { return message.recipient_id === session.user.id && !message.read_at; }).map(function (message) { return message.id; });
+    if (unreadIds.length) {
+      await client.from("messages").update({read_at:new Date().toISOString()}).in("id", unreadIds);
+      allMessages.forEach(function (message) { if (unreadIds.includes(message.id)) message.read_at = new Date().toISOString(); });
+      var remaining = allMessages.filter(function (message) { return message.recipient_id === session.user.id && !message.read_at; }).length;
+      $("#message-badge").hidden = remaining === 0;
+      $("#message-badge").textContent = remaining;
+    }
     var history = $("#message-history");
     history.innerHTML = messages.length ? messages.map(function (message) {
       var mine = message.sender_id === session.user.id;
       var person = mine ? (message.recipient && message.recipient.full_name) : (message.sender && message.sender.full_name);
-      return '<article class="message ' + (mine ? "mine" : "") + '"><p>' + escapeHtml(message.content) + '</p><small>' + (mine ? "À " : "De ") + escapeHtml(person || "Secrétariat") + " · " + formatDateTime(message.created_at) + "</small></article>";
+      return '<article class="message ' + (mine ? "mine" : "") + '"><p>' + escapeHtml(message.content) + '</p><small>' + (mine ? "À " : "De ") + escapeHtml(person || "Secrétariat") + " · " + formatDateTime(message.created_at) + (mine ? (message.read_at ? " · Lu" : " · Envoyé") : "") + "</small></article>";
     }).join("") : '<div class="empty"><span>✉</span><h3>' + (selected ? "Aucun message" : "Choisissez une conversation") + '</h3><p>' + (selected ? "Écrivez le premier message ci-dessous." : "Sélectionnez un élève pour consulter ses échanges.") + '</p></div>';
     history.scrollTop = history.scrollHeight;
   }
@@ -364,6 +437,18 @@
     if (result.error) return showToast(friendlyError(result.error), true);
     $("#message-content").value = "";
     showToast("Message envoyé.");
+    await loadMessages();
+  }
+  async function toggleConversationThread() {
+    if (profile.role !== "admin") return;
+    var studentId = $("#message-recipient").value;
+    if (!studentId) return;
+    var thread = conversationThreads.find(function (item) { return item.student_id === studentId; });
+    var closing = !thread || thread.status !== "closed";
+    var payload = {student_id:studentId, status:closing ? "closed" : "open", closed_at:closing ? new Date().toISOString() : null, closed_by:closing ? session.user.id : null, updated_at:new Date().toISOString()};
+    var result = await client.from("conversation_threads").upsert(payload, {onConflict:"student_id"});
+    if (result.error) return showToast(friendlyError(result.error), true);
+    showToast(closing ? "Conversation clôturée." : "Conversation rouverte.");
     await loadMessages();
   }
 
@@ -411,6 +496,29 @@
     await loadAnnouncements();
   }
 
+  async function loadNotifications() {
+    var result = await client.from("notifications").select("*").eq("user_id", session.user.id).order("created_at", {ascending:false}).limit(8);
+    if (result.error) return;
+    notifications = result.data || [];
+    renderNotifications();
+  }
+  function renderNotifications() {
+    var box = $("#dashboard-notifications");
+    if (!box || profile.role === "admin") return;
+    var unread = notifications.filter(function (item) { return !item.read_at; });
+    box.hidden = unread.length === 0;
+    box.innerHTML = unread.map(function (item) {
+      return '<article><span>!</span><div><strong>' + escapeHtml(item.title) + '</strong><p>' + escapeHtml(item.content) + '</p><small>' + formatDateTime(item.created_at) + '</small></div><button class="action" data-notification-id="' + item.id + '" data-notification-view="' + escapeHtml(item.link_view || "documents") + '">Consulter</button></article>';
+    }).join("");
+    $$("[data-notification-id]", box).forEach(function (button) {
+      button.onclick = async function () {
+        await client.from("notifications").update({read_at:new Date().toISOString()}).eq("id", button.dataset.notificationId);
+        navigate(button.dataset.notificationView || "documents");
+        await loadNotifications();
+      };
+    });
+  }
+
   async function saveProfile(event) {
     event.preventDefault();
     var form = event.currentTarget;
@@ -438,37 +546,48 @@
   async function loadAdmin() {
     var results = await Promise.all([
       client.from("profiles").select("id,full_name,student_number,formation,created_at").eq("role", "student").order("full_name"),
-      client.from("submissions").select("*,profiles!submissions_user_id_fkey(full_name,student_number,formation),document_types(title)").order("submitted_at", {ascending:false})
+      client.from("submissions").select("*,profiles!submissions_user_id_fkey(full_name,student_number,formation),document_types(title)").order("submitted_at", {ascending:false}),
+      client.from("submission_history").select("*,document_types(title),actor:profiles!submission_history_actor_id_fkey(full_name)").order("created_at", {ascending:false})
     ]);
     if (results[0].error) return showToast(friendlyError(results[0].error), true);
     if (results[1].error) return showToast(friendlyError(results[1].error), true);
     adminStudents = results[0].data || [];
     adminSubmissions = results[1].data || [];
+    submissionHistory = results[2].error ? [] : (results[2].data || []);
+    var formationSelect = $("#admin-formation-filter");
+    var previousFormation = formationSelect.value;
+    var formations = Array.from(new Set(adminStudents.map(function (student) { return student.formation; }).filter(Boolean))).sort();
+    formationSelect.innerHTML = '<option value="">Toutes les formations</option>' + formations.map(function (formation) { return '<option>' + escapeHtml(formation) + '</option>'; }).join("");
+    if (formations.includes(previousFormation)) formationSelect.value = previousFormation;
     renderAdmin();
+  }
+  function studentSummary(student) {
+    var required = documentTypes.filter(function (type) { return type.active && (!type.formation || type.formation === student.formation); });
+    var studentItems = adminSubmissions.filter(function (item) { return item.user_id === student.id && required.some(function (type) { return type.id === item.document_type_id; }); });
+    var submitted = studentItems.length;
+    var approved = studentItems.filter(function (item) { return item.status === "approved"; }).length;
+    var total = required.length;
+    var percent = total ? Math.round((submitted / total) * 100) : 0;
+    var stateKey = total === 0 ? "empty" : approved === total ? "complete" : submitted === total ? "review" : submitted === 0 ? "empty" : "progress";
+    return {required:required, submissions:studentItems, submitted:submitted, approved:approved, total:total, percent:percent, stateKey:stateKey, state:stateKey === "complete" ? "Complet" : stateKey === "review" ? "À vérifier" : stateKey === "progress" ? "En cours" : total ? "Non commencé" : "Aucune demande", stateClass:stateKey === "complete" ? "approved" : stateKey === "review" ? "submitted" : "missing"};
   }
   function renderAdmin() {
     var all = adminSubmissions;
     var search = ($("#admin-search").value || "").toLowerCase();
-    var filtered = all.filter(function (item) {
-      var name = item.profiles && item.profiles.full_name || "";
-      return name.toLowerCase().includes(search);
-    });
+    var formationFilter = $("#admin-formation-filter").value;
+    var stateFilter = $("#admin-state-filter").value;
     $("#admin-approved").textContent = all.filter(function (i) { return i.status === "approved"; }).length;
     $("#admin-review").textContent = all.filter(function (i) { return i.status === "submitted"; }).length;
     $("#admin-types").textContent = documentTypes.length;
     var visibleStudents = adminStudents.filter(function (student) {
-      return student.full_name.toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
+      var matchesSearch = student.full_name.toLowerCase().includes(search) || (student.student_number || "").toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
+      return matchesSearch && (!formationFilter || student.formation === formationFilter) && (!stateFilter || studentSummary(student).stateKey === stateFilter);
     });
+    var visibleIds = visibleStudents.map(function (student) { return student.id; });
+    var filtered = all.filter(function (item) { return visibleIds.includes(item.user_id); });
     $("#admin-students").innerHTML = visibleStudents.map(function (student) {
-      var required = documentTypes.filter(function (type) { return type.active && (!type.formation || type.formation === student.formation); });
-      var studentSubmissions = all.filter(function (item) { return item.user_id === student.id; });
-      var submitted = studentSubmissions.filter(function (item) { return required.some(function (type) { return type.id === item.document_type_id; }); }).length;
-      var approved = studentSubmissions.filter(function (item) { return item.status === "approved" && required.some(function (type) { return type.id === item.document_type_id; }); }).length;
-      var total = required.length;
-      var percent = total ? Math.round((submitted / total) * 100) : 0;
-      var state = total === 0 ? "Aucune demande" : approved === total ? "Complet" : submitted === total ? "À vérifier" : submitted === 0 ? "Non commencé" : "En cours";
-      var stateClass = state === "Complet" ? "approved" : state === "À vérifier" ? "submitted" : "missing";
-      return '<tr><td><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td>' + escapeHtml(student.formation || "Non renseignée") + '</td><td><div class="progress-track"><i style="width:' + percent + '%"></i></div><span class="progress-label">' + submitted + ' sur ' + total + ' transmis · ' + percent + ' %</span></td><td>' + approved + ' sur ' + total + '</td><td><span class="status ' + stateClass + '">' + state + '</span></td></tr>';
+      var summary = studentSummary(student);
+      return '<tr><td><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td>' + escapeHtml(student.formation || "Non renseignée") + '</td><td><div class="progress-track"><i style="width:' + summary.percent + '%"></i></div><span class="progress-label">' + summary.submitted + ' sur ' + summary.total + ' transmis · ' + summary.percent + ' %</span></td><td>' + summary.approved + ' sur ' + summary.total + '</td><td><span class="status ' + summary.stateClass + '">' + summary.state + '</span></td><td><button class="action" data-open-student="' + student.id + '">Ouvrir</button></td></tr>';
     }).join("");
     $("#admin-students-empty").hidden = visibleStudents.length > 0;
     $("#admin-submissions").innerHTML = filtered.map(function (item) {
@@ -482,6 +601,64 @@
     $$("[data-admin-download]").forEach(function (b) { b.onclick = function () { downloadSubmission(all.find(function (i) { return i.id === b.dataset.adminDownload; })); }; });
     $$("[data-admin-approve]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminApprove, "approved"); }; });
     $$("[data-admin-reject]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminReject, "rejected"); }; });
+    $$("[data-open-student]").forEach(function (b) { b.onclick = function () { openStudentSheet(b.dataset.openStudent); }; });
+  }
+  function openStudentSheet(studentId) {
+    var student = adminStudents.find(function (item) { return item.id === studentId; });
+    if (!student) return;
+    selectedAdminStudent = student;
+    var summary = studentSummary(student);
+    $("#student-modal-title").textContent = student.full_name;
+    $("#student-modal-initials").textContent = initials(student.full_name);
+    $("#student-modal-meta").textContent = (student.student_number || "Sans numéro") + " · " + (student.formation || "Formation non renseignée");
+    $("#student-modal-percent").textContent = summary.percent + " %";
+    $("#student-modal-bar").style.width = summary.percent + "%";
+    $("#student-modal-documents").innerHTML = summary.required.length ? summary.required.map(function (type) {
+      var submission = summary.submissions.find(function (item) { return item.document_type_id === type.id; });
+      var status = submission ? submission.status : "missing";
+      return '<article><div><strong>' + escapeHtml(type.title) + '</strong><small>' + (submission ? escapeHtml(submission.original_name) + " · " + formatBytes(submission.size_bytes) : "Aucun fichier transmis") + '</small></div><span class="status ' + status + '">' + statusText(status) + '</span>' + (submission ? '<button class="action" data-sheet-download="' + submission.id + '">Voir</button>' : "") + '</article>';
+    }).join("") : '<p class="muted-text">Aucun document demandé pour cette formation.</p>';
+    var history = submissionHistory.filter(function (item) { return item.user_id === student.id; });
+    var historyLabels = {submitted:"Document déposé", replaced:"Document remplacé", approved:"Document validé", rejected:"Correction demandée", deleted:"Document supprimé"};
+    $("#student-modal-history").innerHTML = history.length ? history.map(function (item) {
+      var title = item.document_types && item.document_types.title || item.original_name || "Document";
+      return '<article><i></i><div><strong>' + escapeHtml(historyLabels[item.action] || item.action) + '</strong><p>' + escapeHtml(title) + (item.note ? " · " + escapeHtml(item.note) : "") + '</p><small>' + formatDateTime(item.created_at) + (item.actor && item.actor.full_name ? " · " + escapeHtml(item.actor.full_name) : "") + '</small></div></article>';
+    }).join("") : '<p class="muted-text">Aucune action enregistrée pour le moment.</p>';
+    $$("[data-sheet-download]").forEach(function (button) { button.onclick = function () { downloadSubmission(adminSubmissions.find(function (item) { return item.id === button.dataset.sheetDownload; })); }; });
+    $("#student-modal").hidden = false;
+    document.body.style.overflow = "hidden";
+  }
+  async function sendStudentReminder() {
+    if (!selectedAdminStudent) return;
+    var summary = studentSummary(selectedAdminStudent);
+    var missing = summary.required.filter(function (type) { var item = summary.submissions.find(function (submission) { return submission.document_type_id === type.id; }); return !item || item.status === "rejected"; });
+    var content = missing.length ? "Votre dossier comporte " + missing.length + " document" + (missing.length > 1 ? "s" : "") + " à déposer ou corriger." : "Une action du secrétariat vous attend dans votre dossier administratif.";
+    var result = await client.from("notifications").insert({user_id:selectedAdminStudent.id, title:"Rappel du secrétariat", content:content, link_view:"documents", email_requested:true, email_status:"not_configured", created_by:session.user.id});
+    if (result.error) return showToast(friendlyError(result.error), true);
+    showToast("Rappel ajouté à l'espace de l'élève. L'e-mail sera disponible après configuration d'un prestataire.");
+  }
+  async function sendBulkReminders() {
+    var search = ($("#admin-search").value || "").toLowerCase();
+    var formation = $("#admin-formation-filter").value;
+    var state = $("#admin-state-filter").value;
+    var targets = adminStudents.filter(function (student) {
+      var matches = student.full_name.toLowerCase().includes(search) || (student.student_number || "").toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
+      return matches && (!formation || student.formation === formation) && (!state || studentSummary(student).stateKey === state) && studentSummary(student).stateKey !== "complete";
+    });
+    if (!targets.length) return showToast("Aucun dossier incomplet dans la sélection.", true);
+    if (!window.confirm("Envoyer un rappel aux " + targets.length + " élèves affichés dont le dossier est incomplet ?")) return;
+    var rows = targets.map(function (student) { var summary = studentSummary(student); return {user_id:student.id, title:"Rappel du secrétariat", content:"Votre dossier administratif est incomplet : " + summary.submitted + " document(s) transmis sur " + summary.total + ".", link_view:"documents", email_requested:true, email_status:"not_configured", created_by:session.user.id}; });
+    var result = await client.from("notifications").insert(rows);
+    if (result.error) return showToast(friendlyError(result.error), true);
+    showToast(targets.length + " rappels ajoutés aux espaces élèves.");
+  }
+  function exportStudentsCsv() {
+    var rows = [["Nom", "Numéro apprenant", "Formation", "Documents transmis", "Documents validés", "Total demandé", "État"]];
+    adminStudents.forEach(function (student) { var summary = studentSummary(student); rows.push([student.full_name, student.student_number || "", student.formation || "", summary.submitted, summary.approved, summary.total, summary.state]); });
+    var csv = "\ufeff" + rows.map(function (row) { return row.map(function (cell) { return '"' + String(cell).replace(/"/g, '""') + '"'; }).join(";"); }).join("\r\n");
+    var url = URL.createObjectURL(new Blob([csv], {type:"text/csv;charset=utf-8"}));
+    var link = document.createElement("a"); link.href = url; link.download = "avancement-eleves-la-cazotte.csv"; link.click(); URL.revokeObjectURL(url);
+    showToast("Export CSV téléchargé.");
   }
   async function reviewSubmission(id, status) {
     var reason = null;
@@ -490,8 +667,13 @@
       if (!reason || !reason.trim()) return;
       reason = reason.trim();
     }
-    var result = await client.from("submissions").update({status:status, rejection_reason:reason, reviewed_at:new Date().toISOString(), reviewed_by:session.user.id}).eq("id", id);
+    var result = await client.from("submissions").update({status:status, rejection_reason:reason, reviewed_at:new Date().toISOString(), reviewed_by:session.user.id}).eq("id", id).select("*").single();
     if (result.error) return showToast(friendlyError(result.error), true);
+    var item = result.data;
+    await Promise.all([
+      client.from("submission_history").insert({submission_id:item.id, user_id:item.user_id, document_type_id:item.document_type_id, original_name:item.original_name, action:status, note:reason, actor_id:session.user.id}),
+      client.from("notifications").insert({user_id:item.user_id, title:status === "approved" ? "Document validé" : "Document à corriger", content:status === "approved" ? "Le secrétariat a validé votre document." : "Le secrétariat demande une correction : " + reason, link_view:"documents", email_requested:true, email_status:"not_configured", created_by:session.user.id})
+    ]);
     showToast(status === "approved" ? "Document validé." : "Correction demandée.");
     await loadAdmin();
   }
@@ -522,6 +704,9 @@
       })
       .on("postgres_changes", {event:"*", schema:"public", table:"messages"}, function () { loadMessages(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"announcements"}, function () { loadAnnouncements(); })
+      .on("postgres_changes", {event:"*", schema:"public", table:"conversation_threads"}, function () { loadMessages(); })
+      .on("postgres_changes", {event:"*", schema:"public", table:"notifications"}, function () { loadNotifications(); })
+      .on("postgres_changes", {event:"*", schema:"public", table:"submission_history"}, function () { if (profile.role === "admin") loadAdmin(); })
       .subscribe(function (status) {
         if (status === "CHANNEL_ERROR") showToast("La mise à jour automatique est momentanément indisponible.", true);
       });
@@ -560,14 +745,21 @@
   $("#sidebar-backdrop").addEventListener("click", function () { toggleSidebar(false); });
   $("#document-search").addEventListener("input", renderDocuments);
   $$(".filter").forEach(function (button) { button.addEventListener("click", function () { currentFilter = button.dataset.filter; $$(".filter").forEach(function (b) { b.classList.toggle("active", b === button); }); renderDocuments(); }); });
-  $("#upload-file").addEventListener("change", function () { $("#upload-file-name").textContent = this.files[0] ? this.files[0].name : "Sélectionner un fichier"; });
+  $("#upload-file").addEventListener("change", function () { var file = this.files[0]; $("#upload-file-name").textContent = file ? file.name : "Sélectionner un fichier"; previewUploadFile(file); });
   $("#upload-form").addEventListener("submit", uploadDocument);
   $("#message-form").addEventListener("submit", sendMessage);
   $("#message-recipient").addEventListener("change", renderConversation);
+  $("#toggle-thread-button").addEventListener("click", toggleConversationThread);
   $("#announcement-form").addEventListener("submit", createAnnouncement);
   $("#profile-form").addEventListener("submit", saveProfile);
   $("#password-form").addEventListener("submit", changePassword);
   $("#admin-search").addEventListener("input", renderAdmin);
+  $("#admin-formation-filter").addEventListener("change", renderAdmin);
+  $("#admin-state-filter").addEventListener("change", renderAdmin);
+  $("#export-students-button").addEventListener("click", exportStudentsCsv);
+  $("#bulk-reminder-button").addEventListener("click", sendBulkReminders);
+  $("#student-reminder-button").addEventListener("click", sendStudentReminder);
+  $("#student-message-button").addEventListener("click", function () { if (!selectedAdminStudent) return; var id = selectedAdminStudent.id; closeModals(); navigate("messages"); $("#message-recipient").value = id; renderConversation(); });
   $("#new-request-button").addEventListener("click", function () { $("#request-modal").hidden = false; document.body.style.overflow = "hidden"; });
   $("#request-form").addEventListener("submit", createRequest);
   $$("[data-close-modal]").forEach(function (button) { button.addEventListener("click", closeModals); });

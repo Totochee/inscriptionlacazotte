@@ -64,12 +64,50 @@ create table if not exists public.announcements (
   created_at timestamptz not null default now()
 );
 
+-- Historique métier : conserve les étapes d'un document même après remplacement.
+create table if not exists public.submission_history (
+  id uuid primary key default gen_random_uuid(),
+  submission_id uuid references public.submissions(id) on delete set null,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  document_type_id uuid not null references public.document_types(id) on delete cascade,
+  original_name text,
+  action text not null check (action in ('submitted', 'replaced', 'approved', 'rejected', 'deleted')),
+  note text,
+  actor_id uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
+-- Une conversation support par élève, que le secrétariat peut clôturer/réouvrir.
+create table if not exists public.conversation_threads (
+  student_id uuid primary key references public.profiles(id) on delete cascade,
+  status text not null default 'open' check (status in ('open', 'closed')),
+  closed_at timestamptz,
+  closed_by uuid references public.profiles(id) on delete set null,
+  updated_at timestamptz not null default now()
+);
+
+-- Notifications internes. email_requested prépare un futur prestataire d'e-mail.
+create table if not exists public.notifications (
+  id uuid primary key default gen_random_uuid(),
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  title text not null check (char_length(title) between 1 and 160),
+  content text not null check (char_length(content) between 1 and 1000),
+  link_view text,
+  read_at timestamptz,
+  email_requested boolean not null default false,
+  email_status text not null default 'not_configured' check (email_status in ('not_configured', 'pending', 'sent', 'failed')),
+  created_by uuid references public.profiles(id) on delete set null,
+  created_at timestamptz not null default now()
+);
+
 create index if not exists submissions_user_id_idx on public.submissions(user_id);
 create index if not exists submissions_status_idx on public.submissions(status);
 create index if not exists messages_sender_id_idx on public.messages(sender_id);
 create index if not exists messages_recipient_id_idx on public.messages(recipient_id);
 create index if not exists document_types_active_idx on public.document_types(active);
 create index if not exists announcements_published_at_idx on public.announcements(published_at desc);
+create index if not exists submission_history_user_idx on public.submission_history(user_id, created_at desc);
+create index if not exists notifications_user_idx on public.notifications(user_id, created_at desc);
 
 -- Création automatique du profil après inscription.
 create or replace function public.handle_new_user()
@@ -117,6 +155,9 @@ alter table public.document_types enable row level security;
 alter table public.submissions enable row level security;
 alter table public.messages enable row level security;
 alter table public.announcements enable row level security;
+alter table public.submission_history enable row level security;
+alter table public.conversation_threads enable row level security;
+alter table public.notifications enable row level security;
 
 drop policy if exists "profiles_select" on public.profiles;
 create policy "profiles_select" on public.profiles for select to authenticated
@@ -226,7 +267,52 @@ with check (
       where id = recipient_id and role = 'admin' and is_support = true
     )
   )
+  and not exists (
+    select 1 from public.conversation_threads t
+    where t.student_id = case when (select public.is_admin()) then recipient_id else (select auth.uid()) end
+      and t.status = 'closed'
+  )
 );
+
+drop policy if exists "messages_recipient_mark_read" on public.messages;
+create policy "messages_recipient_mark_read" on public.messages for update to authenticated
+using (recipient_id = (select auth.uid()))
+with check (recipient_id = (select auth.uid()));
+
+drop policy if exists "history_select" on public.submission_history;
+create policy "history_select" on public.submission_history for select to authenticated
+using (user_id = (select auth.uid()) or (select public.is_admin()));
+
+drop policy if exists "history_insert" on public.submission_history;
+create policy "history_insert" on public.submission_history for insert to authenticated
+with check (
+  actor_id = (select auth.uid())
+  and (user_id = (select auth.uid()) or (select public.is_admin()))
+);
+
+drop policy if exists "threads_select" on public.conversation_threads;
+create policy "threads_select" on public.conversation_threads for select to authenticated
+using (student_id = (select auth.uid()) or (select public.is_admin()));
+
+drop policy if exists "threads_admin_insert" on public.conversation_threads;
+create policy "threads_admin_insert" on public.conversation_threads for insert to authenticated
+with check ((select public.is_admin()));
+
+drop policy if exists "threads_admin_update" on public.conversation_threads;
+create policy "threads_admin_update" on public.conversation_threads for update to authenticated
+using ((select public.is_admin())) with check ((select public.is_admin()));
+
+drop policy if exists "notifications_select" on public.notifications;
+create policy "notifications_select" on public.notifications for select to authenticated
+using (user_id = (select auth.uid()) or (select public.is_admin()));
+
+drop policy if exists "notifications_admin_insert" on public.notifications;
+create policy "notifications_admin_insert" on public.notifications for insert to authenticated
+with check ((select public.is_admin()) and created_by = (select auth.uid()));
+
+drop policy if exists "notifications_recipient_update" on public.notifications;
+create policy "notifications_recipient_update" on public.notifications for update to authenticated
+using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
 
 drop policy if exists "announcements_select" on public.announcements;
 create policy "announcements_select" on public.announcements for select to authenticated
@@ -257,10 +343,12 @@ create policy "announcements_admin_delete" on public.announcements for delete to
 using ((select public.is_admin()));
 
 -- Droits minimums accordés à l'application.
-revoke all on public.profiles, public.document_types, public.submissions, public.messages, public.announcements from anon;
-grant select on public.profiles, public.document_types, public.submissions, public.messages, public.announcements to authenticated;
-grant insert on public.document_types, public.submissions, public.messages, public.announcements to authenticated;
-grant update on public.document_types, public.submissions, public.announcements to authenticated;
+revoke all on public.profiles, public.document_types, public.submissions, public.messages, public.announcements, public.submission_history, public.conversation_threads, public.notifications from anon;
+grant select on public.profiles, public.document_types, public.submissions, public.messages, public.announcements, public.submission_history, public.conversation_threads, public.notifications to authenticated;
+grant insert on public.document_types, public.submissions, public.messages, public.announcements, public.submission_history, public.conversation_threads, public.notifications to authenticated;
+grant update on public.document_types, public.submissions, public.announcements, public.conversation_threads to authenticated;
+grant update (read_at) on public.messages to authenticated;
+grant update (read_at) on public.notifications to authenticated;
 grant delete on public.document_types, public.submissions, public.announcements to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (full_name, student_number, formation, updated_at) on public.profiles to authenticated;
@@ -270,7 +358,7 @@ do $$
 declare
   table_name text;
 begin
-  foreach table_name in array array['profiles', 'document_types', 'submissions', 'messages', 'announcements']
+  foreach table_name in array array['profiles', 'document_types', 'submissions', 'messages', 'announcements', 'submission_history', 'conversation_threads', 'notifications']
   loop
     if not exists (
       select 1 from pg_publication_tables
