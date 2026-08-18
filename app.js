@@ -11,6 +11,7 @@
   var submissions = [];
   var adminSubmissions = [];
   var adminStudents = [];
+  var adminDocumentTypes = [];
   var allMessages = [];
   var announcements = [];
   var submissionHistory = [];
@@ -21,6 +22,7 @@
   var liveChannel = null;
   var currentFilter = "all";
   var toastTimer;
+  var lastFocusedElement = null;
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
   var $$ = function (selector, root) { return Array.from((root || document).querySelectorAll(selector)); };
@@ -58,6 +60,7 @@
   function setBusy(form, busy) {
     var button = $("button[type=submit]", form);
     if (button) button.disabled = busy;
+    form.setAttribute("aria-busy", busy ? "true" : "false");
   }
   function friendlyError(error) {
     var text = error && error.message ? error.message : "Une erreur est survenue.";
@@ -109,6 +112,7 @@
     $("#reset-form").hidden = tab !== "reset";
     $$(".auth-tabs button").forEach(function (button) {
       button.classList.toggle("active", button.dataset.authTab === tab);
+      button.setAttribute("aria-selected", button.dataset.authTab === tab ? "true" : "false");
     });
     $(".auth-tabs").hidden = tab === "reset";
     $("#auth-title").textContent = tab === "signup" ? "Créer un compte" : tab === "reset" ? "Réinitialiser le mot de passe" : "Se connecter";
@@ -165,7 +169,12 @@
     if (!labels[view]) view = "dashboard";
     $$(".view").forEach(function (section) { section.classList.remove("active"); });
     $("#view-" + view).classList.add("active");
-    $$(".nav-item").forEach(function (button) { button.classList.toggle("active", button.dataset.view === view); });
+    $$(".nav-item").forEach(function (button) {
+      var active = button.dataset.view === view;
+      button.classList.toggle("active", active);
+      if (active) button.setAttribute("aria-current", "page");
+      else button.removeAttribute("aria-current");
+    });
     $("#page-label").textContent = labels[view];
     $("#sidebar").classList.remove("open");
     $("#sidebar-backdrop").classList.remove("show");
@@ -277,8 +286,17 @@
     $("#upload-type-id").value = item.type.id;
     $("#upload-title").textContent = item.type.title;
     $("#upload-description").textContent = item.type.description || "Sélectionnez un fichier lisible correspondant à la pièce demandée.";
-    $("#upload-modal").hidden = false;
+    openModal("#upload-modal", "#upload-file");
+  }
+  function openModal(selector, focusSelector) {
+    lastFocusedElement = document.activeElement;
+    var wrap = $(selector);
+    wrap.hidden = false;
     document.body.style.overflow = "hidden";
+    window.setTimeout(function () {
+      var target = focusSelector ? $(focusSelector, wrap) : $("input:not([type=hidden]), select, textarea, button", wrap);
+      if (target) target.focus();
+    }, 0);
   }
   function closeModals() {
     $$(".modal-wrap").forEach(function (modal) { modal.hidden = true; });
@@ -290,6 +308,12 @@
     $("#upload-preview-image").hidden = true;
     if (currentPreviewUrl) URL.revokeObjectURL(currentPreviewUrl);
     currentPreviewUrl = null;
+    var requestForm = $("#request-form");
+    requestForm.reset();
+    delete requestForm.dataset.requestId;
+    delete requestForm.dataset.mode;
+    if (lastFocusedElement && document.contains(lastFocusedElement)) lastFocusedElement.focus();
+    lastFocusedElement = null;
   }
   function previewUploadFile(file) {
     var preview = $("#upload-preview");
@@ -558,13 +582,15 @@
     var results = await Promise.all([
       client.from("profiles").select("id,full_name,student_number,formation,created_at").eq("role", "student").order("full_name"),
       client.from("submissions").select("*,profiles!submissions_user_id_fkey(full_name,student_number,formation),document_types(title)").order("submitted_at", {ascending:false}),
-      client.from("submission_history").select("*,document_types(title),actor:profiles!submission_history_actor_id_fkey(full_name)").order("created_at", {ascending:false})
+      client.from("submission_history").select("*,document_types(title),actor:profiles!submission_history_actor_id_fkey(full_name)").order("created_at", {ascending:false}),
+      client.from("document_types").select("*").order("created_at", {ascending:false})
     ]);
     if (results[0].error) return showToast(friendlyError(results[0].error), true);
     if (results[1].error) return showToast(friendlyError(results[1].error), true);
     adminStudents = results[0].data || [];
     adminSubmissions = results[1].data || [];
     submissionHistory = results[2].error ? [] : (results[2].data || []);
+    adminDocumentTypes = results[3].error ? documentTypes.slice() : (results[3].data || []);
     var formationSelect = $("#admin-formation-filter");
     var previousFormation = formationSelect.value;
     var formations = Array.from(new Set(adminStudents.map(function (student) { return student.formation; }).filter(Boolean))).sort();
@@ -589,7 +615,8 @@
     var stateFilter = $("#admin-state-filter").value;
     $("#admin-approved").textContent = all.filter(function (i) { return i.status === "approved"; }).length;
     $("#admin-review").textContent = all.filter(function (i) { return i.status === "submitted"; }).length;
-    $("#admin-types").textContent = documentTypes.length;
+    $("#admin-types").textContent = adminDocumentTypes.filter(function (type) { return type.active; }).length;
+    renderAdminRequests();
     var visibleStudents = adminStudents.filter(function (student) {
       var matchesSearch = student.full_name.toLowerCase().includes(search) || (student.student_number || "").toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
       return matchesSearch && (!formationFilter || student.formation === formationFilter) && (!stateFilter || studentSummary(student).stateKey === stateFilter);
@@ -598,7 +625,7 @@
     var filtered = all.filter(function (item) { return visibleIds.includes(item.user_id); });
     $("#admin-students").innerHTML = visibleStudents.map(function (student) {
       var summary = studentSummary(student);
-      return '<tr><td><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td>' + escapeHtml(student.formation || "Non renseignée") + '</td><td><div class="progress-track"><i style="width:' + summary.percent + '%"></i></div><span class="progress-label">' + summary.submitted + ' sur ' + summary.total + ' transmis · ' + summary.percent + ' %</span></td><td>' + summary.approved + ' sur ' + summary.total + '</td><td><span class="status ' + summary.stateClass + '">' + summary.state + '</span></td><td><button class="action" data-open-student="' + student.id + '">Ouvrir</button></td></tr>';
+      return '<tr><td data-label="Élève"><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td data-label="Formation">' + escapeHtml(student.formation || "Non renseignée") + '</td><td data-label="Dossier"><div class="progress-track"><i style="width:' + summary.percent + '%"></i></div><span class="progress-label">' + summary.submitted + ' sur ' + summary.total + ' transmis · ' + summary.percent + ' %</span></td><td data-label="Validés">' + summary.approved + ' sur ' + summary.total + '</td><td data-label="État"><span class="status ' + summary.stateClass + '">' + summary.state + '</span></td><td data-label="Action"><button class="action" data-open-student="' + student.id + '" aria-label="Ouvrir le dossier de ' + escapeHtml(student.full_name) + '">Ouvrir</button></td></tr>';
     }).join("");
     $("#admin-students-empty").hidden = visibleStudents.length > 0;
     $("#admin-submissions").innerHTML = filtered.map(function (item) {
@@ -606,13 +633,27 @@
       var t = item.document_types || {};
       var actions = '<button class="action" data-admin-download="' + item.id + '">Voir</button>';
       if (item.status === "submitted") actions += '<button class="action approve" data-admin-approve="' + item.id + '">Valider</button><button class="action reject" data-admin-reject="' + item.id + '">Refuser</button>';
-      return "<tr><td><strong>" + escapeHtml(p.full_name || "Compte supprimé") + "</strong><small>" + escapeHtml(p.formation || "") + "</small></td><td><strong>" + escapeHtml(t.title || "Document") + "</strong><small>" + escapeHtml(item.original_name) + "</small></td><td>" + formatDateTime(item.submitted_at) + '</td><td><span class="status ' + item.status + '">' + statusText(item.status) + '</span></td><td><div class="table-actions">' + actions + "</div></td></tr>";
+      return "<tr><td data-label=\"Apprenant\"><strong>" + escapeHtml(p.full_name || "Compte supprimé") + "</strong><small>" + escapeHtml(p.formation || "") + "</small></td><td data-label=\"Document\"><strong>" + escapeHtml(t.title || "Document") + "</strong><small>" + escapeHtml(item.original_name) + "</small></td><td data-label=\"Déposé le\">" + formatDateTime(item.submitted_at) + '</td><td data-label="Statut"><span class="status ' + item.status + '">' + statusText(item.status) + '</span></td><td data-label="Actions"><div class="table-actions">' + actions + "</div></td></tr>";
     }).join("");
     $("#admin-empty").hidden = filtered.length > 0;
     $$("[data-admin-download]").forEach(function (b) { b.onclick = function () { downloadSubmission(all.find(function (i) { return i.id === b.dataset.adminDownload; })); }; });
     $$("[data-admin-approve]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminApprove, "approved"); }; });
     $$("[data-admin-reject]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminReject, "rejected"); }; });
     $$("[data-open-student]").forEach(function (b) { b.onclick = function () { openStudentSheet(b.dataset.openStudent); }; });
+  }
+  function renderAdminRequests() {
+    var body = $("#admin-requests");
+    body.innerHTML = adminDocumentTypes.map(function (type) {
+      var statusClass = type.active ? "approved" : "inactive";
+      var statusLabel = type.active ? "Active" : "Désactivée";
+      var toggleLabel = type.active ? "Désactiver" : "Réactiver";
+      var safeTitle = escapeHtml(type.title);
+      return '<tr class="' + (type.active ? "" : "request-inactive") + '"><td data-label="Document"><strong>' + safeTitle + '</strong><small>' + escapeHtml(type.category || "Sans catégorie") + '</small></td><td data-label="Formation">' + escapeHtml(type.formation || "Toutes les formations") + '</td><td data-label="Échéance">' + formatDate(type.deadline) + '</td><td data-label="Statut"><span class="status ' + statusClass + '">' + statusLabel + '</span></td><td data-label="Actions"><div class="table-actions"><button class="action" type="button" data-edit-request="' + type.id + '" aria-label="Modifier la demande ' + safeTitle + '">Modifier</button><button class="action" type="button" data-duplicate-request="' + type.id + '" aria-label="Dupliquer la demande ' + safeTitle + '">Dupliquer</button><button class="action ' + (type.active ? "delete" : "approve") + '" type="button" data-toggle-request="' + type.id + '">' + toggleLabel + '</button></div></td></tr>';
+    }).join("");
+    $("#admin-requests-empty").hidden = adminDocumentTypes.length > 0;
+    $$("[data-edit-request]", body).forEach(function (button) { button.onclick = function () { openRequestModal("edit", button.dataset.editRequest); }; });
+    $$("[data-duplicate-request]", body).forEach(function (button) { button.onclick = function () { openRequestModal("duplicate", button.dataset.duplicateRequest); }; });
+    $$("[data-toggle-request]", body).forEach(function (button) { button.onclick = function () { toggleRequest(button.dataset.toggleRequest, button); }; });
   }
   function openStudentSheet(studentId) {
     var student = adminStudents.find(function (item) { return item.id === studentId; });
@@ -636,8 +677,7 @@
       return '<article><i></i><div><strong>' + escapeHtml(historyLabels[item.action] || item.action) + '</strong><p>' + escapeHtml(title) + (item.note ? " · " + escapeHtml(item.note) : "") + '</p><small>' + formatDateTime(item.created_at) + (item.actor && item.actor.full_name ? " · " + escapeHtml(item.actor.full_name) : "") + '</small></div></article>';
     }).join("") : '<p class="muted-text">Aucune action enregistrée pour le moment.</p>';
     $$("[data-sheet-download]").forEach(function (button) { button.onclick = function () { downloadSubmission(adminSubmissions.find(function (item) { return item.id === button.dataset.sheetDownload; })); }; });
-    $("#student-modal").hidden = false;
-    document.body.style.overflow = "hidden";
+    openModal("#student-modal", "#student-message-button");
   }
   async function sendStudentReminder() {
     if (!selectedAdminStudent) return;
@@ -688,15 +728,63 @@
     showToast(status === "approved" ? "Document validé." : "Correction demandée.");
     await loadAdmin();
   }
-  async function createRequest(event) {
+  function openRequestModal(mode, requestId) {
+    var form = $("#request-form");
+    var item = adminDocumentTypes.find(function (type) { return type.id === requestId; });
+    form.reset();
+    delete form.dataset.requestId;
+    form.dataset.mode = mode || "create";
+    if (item) {
+      form.elements.title.value = item.title || "";
+      form.elements.category.value = item.category || "";
+      form.elements.description.value = item.description || "";
+      form.elements.deadline.value = item.deadline || "";
+      form.elements.formation.value = item.formation || "";
+    }
+    if (mode === "edit" && item) {
+      form.dataset.requestId = item.id;
+      $("#request-modal-eyebrow").textContent = "Modification";
+      $("#request-modal-title").textContent = "Modifier la demande";
+      $("#request-modal-help").textContent = "Les changements seront immédiatement visibles par les élèves concernés.";
+      $("#request-submit-button").textContent = "Enregistrer les modifications";
+    } else if (mode === "duplicate" && item) {
+      $("#request-modal-eyebrow").textContent = "Duplication";
+      $("#request-modal-title").textContent = "Dupliquer la demande";
+      $("#request-modal-help").textContent = "Choisissez notamment la formation qui recevra cette nouvelle demande.";
+      $("#request-submit-button").textContent = "Créer la copie";
+    } else {
+      $("#request-modal-eyebrow").textContent = "Nouvelle demande";
+      $("#request-modal-title").textContent = "Demander un document";
+      $("#request-modal-help").textContent = "Cette demande apparaîtra dans le dossier des élèves concernés.";
+      $("#request-submit-button").textContent = "Créer la demande";
+    }
+    openModal("#request-modal", 'input[name="title"]');
+  }
+  async function saveRequest(event) {
     event.preventDefault();
     var form = event.currentTarget;
     setBusy(form, true);
-    var payload = {title:form.elements.title.value.trim(), category:form.elements.category.value.trim(), description:form.elements.description.value.trim() || null, deadline:form.elements.deadline.value || null, formation:form.elements.formation.value || null, created_by:session.user.id};
-    var result = await client.from("document_types").insert(payload);
+    var payload = {title:form.elements.title.value.trim(), category:form.elements.category.value.trim(), description:form.elements.description.value.trim() || null, deadline:form.elements.deadline.value || null, formation:form.elements.formation.value || null};
+    var requestId = form.dataset.requestId;
+    if (!requestId) payload.created_by = session.user.id;
+    var result = requestId ? await client.from("document_types").update(payload).eq("id", requestId).select("id").single() : await client.from("document_types").insert(payload).select("id").single();
     setBusy(form, false);
     if (result.error) return showToast(friendlyError(result.error), true);
-    form.reset(); closeModals(); showToast("La demande de document a été créée.");
+    var message = requestId ? "La demande a été modifiée." : form.dataset.mode === "duplicate" ? "La demande a été dupliquée." : "La demande de document a été créée.";
+    closeModals(); showToast(message);
+    await loadDocuments(); await loadAdmin();
+  }
+  async function toggleRequest(id, button) {
+    var item = adminDocumentTypes.find(function (type) { return type.id === id; });
+    if (!item) return;
+    var nextActive = !item.active;
+    var prompt = nextActive ? "Réactiver cette demande pour les élèves concernés ?" : "Désactiver cette demande ? Elle ne sera plus affichée aux élèves, mais les dépôts existants seront conservés.";
+    if (!window.confirm(prompt)) return;
+    button.disabled = true;
+    var result = await client.from("document_types").update({active:nextActive}).eq("id", id).select("id").single();
+    button.disabled = false;
+    if (result.error) return showToast(friendlyError(result.error), true);
+    showToast(nextActive ? "Demande réactivée." : "Demande désactivée.");
     await loadDocuments(); await loadAdmin();
   }
 
@@ -750,6 +838,7 @@
   function toggleSidebar(open) {
     $("#sidebar").classList.toggle("open", open);
     $("#sidebar-backdrop").classList.toggle("show", open);
+    $("#menu-button").setAttribute("aria-expanded", open ? "true" : "false");
   }
   $("#menu-button").addEventListener("click", function () { toggleSidebar(!$("#sidebar").classList.contains("open")); });
   $("#sidebar-close").addEventListener("click", function () { toggleSidebar(false); });
@@ -771,11 +860,22 @@
   $("#bulk-reminder-button").addEventListener("click", sendBulkReminders);
   $("#student-reminder-button").addEventListener("click", sendStudentReminder);
   $("#student-message-button").addEventListener("click", function () { if (!selectedAdminStudent) return; var id = selectedAdminStudent.id; closeModals(); navigate("messages"); $("#message-recipient").value = id; renderConversation(); });
-  $("#new-request-button").addEventListener("click", function () { $("#request-modal").hidden = false; document.body.style.overflow = "hidden"; });
-  $("#request-form").addEventListener("submit", createRequest);
+  $("#new-request-button").addEventListener("click", function () { openRequestModal("create"); });
+  $("#new-request-inline-button").addEventListener("click", function () { openRequestModal("create"); });
+  $("#request-form").addEventListener("submit", saveRequest);
   $$("[data-close-modal]").forEach(function (button) { button.addEventListener("click", closeModals); });
   $$(".modal-wrap").forEach(function (modal) { modal.addEventListener("click", function (event) { if (event.target === modal) closeModals(); }); });
-  document.addEventListener("keydown", function (event) { if (event.key === "Escape") closeModals(); });
+  document.addEventListener("keydown", function (event) {
+    var openWrap = $(".modal-wrap:not([hidden])");
+    if (event.key === "Escape" && openWrap) return closeModals();
+    if (event.key !== "Tab" || !openWrap) return;
+    var focusable = $$('button:not([disabled]), input:not([disabled]):not([type="hidden"]), select:not([disabled]), textarea:not([disabled]), [href], [tabindex]:not([tabindex="-1"])', openWrap).filter(function (element) { return element.offsetParent !== null; });
+    if (!focusable.length) return;
+    var first = focusable[0];
+    var last = focusable[focusable.length - 1];
+    if (event.shiftKey && document.activeElement === first) { event.preventDefault(); last.focus(); }
+    else if (!event.shiftKey && document.activeElement === last) { event.preventDefault(); first.focus(); }
+  });
   document.addEventListener("visibilitychange", function () { if (document.visibilityState === "visible" && $("#view-messages").classList.contains("active")) renderConversation(); });
 
   start().catch(function (error) {
