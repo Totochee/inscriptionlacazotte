@@ -424,8 +424,10 @@
     history.innerHTML = messages.length ? messages.map(function (message) {
       var mine = message.sender_id === session.user.id;
       var person = mine ? (message.recipient && message.recipient.full_name) : (message.sender && message.sender.full_name);
-      return '<article class="message ' + (mine ? "mine" : "") + '"><p>' + escapeHtml(message.content) + '</p><small>' + (mine ? "À " : "De ") + escapeHtml(person || "Secrétariat") + " · " + formatDateTime(message.created_at) + (mine ? (message.read_at ? " · Lu" : " · Envoyé") : "") + "</small></article>";
+      var deleteButton = profile.role === "admin" ? '<button class="message-delete" data-delete-message="' + message.id + '" type="button">Supprimer</button>' : "";
+      return '<article class="message ' + (mine ? "mine" : "") + '"><p>' + escapeHtml(message.content) + '</p><footer><small>' + (mine ? "À " : "De ") + escapeHtml(person || "Secrétariat") + " · " + formatDateTime(message.created_at) + (mine ? (message.read_at ? " · Lu" : " · Envoyé") : "") + "</small>" + deleteButton + "</footer></article>";
     }).join("") : '<div class="empty"><span>✉</span><h3>' + (selected ? "Aucun message" : "Choisissez une conversation") + '</h3><p>' + (selected ? "Écrivez le premier message ci-dessous." : "Sélectionnez un élève pour consulter ses échanges.") + '</p></div>';
+    $$("[data-delete-message]", history).forEach(function (button) { button.onclick = function () { deleteMessage(button.dataset.deleteMessage); }; });
     history.scrollTop = history.scrollHeight;
   }
   async function sendMessage(event) {
@@ -439,6 +441,13 @@
     if (result.error) return showToast(friendlyError(result.error), true);
     $("#message-content").value = "";
     showToast("Message envoyé.");
+    await loadMessages();
+  }
+  async function deleteMessage(id) {
+    if (profile.role !== "admin" || !window.confirm("Supprimer définitivement ce message ? Cette action est irréversible.")) return;
+    var result = await client.from("messages").delete().eq("id", id).select("id").maybeSingle();
+    if (result.error || !result.data) return showToast(result.error ? friendlyError(result.error) : "Ce message ne peut pas être supprimé.", true);
+    showToast("Message supprimé.");
     await loadMessages();
   }
   async function toggleConversationThread() {

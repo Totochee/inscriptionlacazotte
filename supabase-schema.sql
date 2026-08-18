@@ -279,6 +279,13 @@ create policy "messages_recipient_mark_read" on public.messages for update to au
 using (recipient_id = (select auth.uid()))
 with check (recipient_id = (select auth.uid()));
 
+drop policy if exists "messages_admin_delete" on public.messages;
+create policy "messages_admin_delete" on public.messages for delete to authenticated
+using (
+  (select public.is_admin())
+  and (sender_id = (select auth.uid()) or recipient_id = (select auth.uid()))
+);
+
 drop policy if exists "history_select" on public.submission_history;
 create policy "history_select" on public.submission_history for select to authenticated
 using (user_id = (select auth.uid()) or (select public.is_admin()));
@@ -349,7 +356,7 @@ grant insert on public.document_types, public.submissions, public.messages, publ
 grant update on public.document_types, public.submissions, public.announcements, public.conversation_threads to authenticated;
 grant update (read_at) on public.messages to authenticated;
 grant update (read_at) on public.notifications to authenticated;
-grant delete on public.document_types, public.submissions, public.announcements to authenticated;
+grant delete on public.document_types, public.submissions, public.messages, public.announcements to authenticated;
 revoke update on public.profiles from authenticated;
 grant update (full_name, student_number, formation, updated_at) on public.profiles to authenticated;
 
