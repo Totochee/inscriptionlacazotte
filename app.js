@@ -14,6 +14,7 @@
   var adminDocumentTypes = [];
   var allMessages = [];
   var announcements = [];
+  var announcementReads = [];
   var submissionHistory = [];
   var conversationThreads = [];
   var notifications = [];
@@ -488,20 +489,30 @@
   }
 
   async function loadAnnouncements() {
-    var result = await client.from("announcements").select("*").order("published_at", {ascending:false});
-    if (result.error) return showToast(friendlyError(result.error), true);
-    announcements = result.data || [];
+    var results = await Promise.all([
+      client.from("announcements").select("*").order("published_at", {ascending:false}),
+      client.from("announcement_reads").select("announcement_id,read_at").eq("user_id", session.user.id)
+    ]);
+    if (results[0].error) return showToast(friendlyError(results[0].error), true);
+    announcements = results[0].data || [];
+    announcementReads = results[1].error ? [] : (results[1].data || []);
     renderAnnouncements();
   }
   function renderAnnouncements() {
     var list = $("#announcement-list");
     list.innerHTML = announcements.map(function (announcement) {
+      var isRead = announcementReads.some(function (read) { return read.announcement_id === announcement.id; });
       var deleteButton = profile.role === "admin" ? '<button class="announcement-delete" data-delete-announcement="' + announcement.id + '">Supprimer</button>' : "";
-      return '<article class="announcement-card"><header><div><p class="eyebrow orange">Annonce</p><h2>' + escapeHtml(announcement.title) + '</h2></div><div><time>' + formatDateTime(announcement.published_at) + '</time>' + deleteButton + '</div></header><p>' + escapeHtml(announcement.content) + '</p><span class="announcement-target">' + escapeHtml(announcement.formation || "Tous les apprenants") + '</span></article>';
+      var readControl = isRead ? '<span class="announcement-read-state">✓ Lu</span>' : '<button class="announcement-read-button" type="button" data-read-announcement="' + announcement.id + '">Marquer comme lu</button>';
+      return '<article class="announcement-card ' + (isRead ? "read" : "unread") + '"><header><div><p class="eyebrow orange">Annonce ' + (isRead ? "" : '<span class="announcement-unread-label">Non lue</span>') + '</p><h2>' + escapeHtml(announcement.title) + '</h2></div><time>' + formatDateTime(announcement.published_at) + '</time></header><p>' + escapeHtml(announcement.content) + '</p><footer><span class="announcement-target">' + escapeHtml(announcement.formation || "Tous les apprenants") + '</span><div>' + readControl + deleteButton + '</div></footer></article>';
     }).join("");
+    var unreadCount = announcements.filter(function (announcement) { return !announcementReads.some(function (read) { return read.announcement_id === announcement.id; }); }).length;
     $("#announcements-empty").hidden = announcements.length > 0;
-    $("#announcement-badge").hidden = announcements.length === 0;
-    $("#announcement-badge").textContent = announcements.length;
+    $("#announcement-badge").hidden = unreadCount === 0;
+    $("#announcement-badge").textContent = unreadCount;
+    $$('[data-read-announcement]').forEach(function (button) {
+      button.onclick = function () { markAnnouncementRead(button.dataset.readAnnouncement, button); };
+    });
     $$('[data-delete-announcement]').forEach(function (button) {
       button.onclick = function () { deleteAnnouncement(button.dataset.deleteAnnouncement); };
     });
@@ -516,12 +527,23 @@
       content:form.elements.content.value.trim(),
       formation:form.elements.formation.value || null,
       created_by:session.user.id
-    });
+    }).select("id").single();
     setBusy(form, false);
     if (result.error) return showToast(friendlyError(result.error), true);
+    await client.from("announcement_reads").insert({announcement_id:result.data.id, user_id:session.user.id});
     form.reset();
     showToast("Annonce publiée. Les élèves la voient immédiatement.");
     await loadAnnouncements();
+  }
+  async function markAnnouncementRead(id, button) {
+    if (announcementReads.some(function (read) { return read.announcement_id === id; })) return;
+    button.disabled = true;
+    var result = await client.from("announcement_reads").insert({announcement_id:id, user_id:session.user.id}).select("announcement_id,read_at").single();
+    button.disabled = false;
+    if (result.error) return showToast(friendlyError(result.error), true);
+    announcementReads.push(result.data);
+    renderAnnouncements();
+    showToast("Annonce marquée comme lue.");
   }
   async function deleteAnnouncement(id) {
     if (profile.role !== "admin" || !window.confirm("Supprimer cette annonce ?")) return;
@@ -845,6 +867,7 @@
       })
       .on("postgres_changes", {event:"*", schema:"public", table:"messages"}, function () { loadMessages(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"announcements"}, function () { loadAnnouncements(); })
+      .on("postgres_changes", {event:"*", schema:"public", table:"announcement_reads"}, function () { loadAnnouncements(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"conversation_threads"}, function () { loadMessages(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"notifications"}, function () { loadNotifications(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"submission_history"}, function () { if (profile.role === "admin") loadAdmin(); })
@@ -925,3 +948,4 @@
     showToast(friendlyError(error), true);
   });
 }());
+

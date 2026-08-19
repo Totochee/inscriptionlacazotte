@@ -71,6 +71,14 @@ create table if not exists public.announcements (
   created_at timestamptz not null default now()
 );
 
+-- État de lecture propre à chaque utilisateur pour les annonces.
+create table if not exists public.announcement_reads (
+  announcement_id uuid not null references public.announcements(id) on delete cascade,
+  user_id uuid not null references public.profiles(id) on delete cascade,
+  read_at timestamptz not null default now(),
+  primary key (announcement_id, user_id)
+);
+
 -- Historique métier : conserve les étapes d'un document même après remplacement.
 create table if not exists public.submission_history (
   id uuid primary key default gen_random_uuid(),
@@ -113,6 +121,7 @@ create index if not exists messages_sender_id_idx on public.messages(sender_id);
 create index if not exists messages_recipient_id_idx on public.messages(recipient_id);
 create index if not exists document_types_active_idx on public.document_types(active);
 create index if not exists announcements_published_at_idx on public.announcements(published_at desc);
+create index if not exists announcement_reads_user_idx on public.announcement_reads(user_id);
 create index if not exists submission_history_user_idx on public.submission_history(user_id, created_at desc);
 create index if not exists notifications_user_idx on public.notifications(user_id, created_at desc);
 
@@ -162,6 +171,7 @@ alter table public.document_types enable row level security;
 alter table public.submissions enable row level security;
 alter table public.messages enable row level security;
 alter table public.announcements enable row level security;
+alter table public.announcement_reads enable row level security;
 alter table public.submission_history enable row level security;
 alter table public.conversation_threads enable row level security;
 alter table public.notifications enable row level security;
@@ -356,11 +366,23 @@ drop policy if exists "announcements_admin_delete" on public.announcements;
 create policy "announcements_admin_delete" on public.announcements for delete to authenticated
 using ((select public.is_admin()));
 
+drop policy if exists "announcement_reads_select_own" on public.announcement_reads;
+create policy "announcement_reads_select_own" on public.announcement_reads for select to authenticated
+using (user_id = (select auth.uid()));
+
+drop policy if exists "announcement_reads_insert_own" on public.announcement_reads;
+create policy "announcement_reads_insert_own" on public.announcement_reads for insert to authenticated
+with check (user_id = (select auth.uid()));
+
+drop policy if exists "announcement_reads_update_own" on public.announcement_reads;
+create policy "announcement_reads_update_own" on public.announcement_reads for update to authenticated
+using (user_id = (select auth.uid())) with check (user_id = (select auth.uid()));
+
 -- Droits minimums accordés à l'application.
-revoke all on public.profiles, public.document_types, public.submissions, public.messages, public.announcements, public.submission_history, public.conversation_threads, public.notifications from anon;
-grant select on public.profiles, public.document_types, public.submissions, public.messages, public.announcements, public.submission_history, public.conversation_threads, public.notifications to authenticated;
-grant insert on public.document_types, public.submissions, public.messages, public.announcements, public.submission_history, public.conversation_threads, public.notifications to authenticated;
-grant update on public.document_types, public.submissions, public.announcements, public.conversation_threads to authenticated;
+revoke all on public.profiles, public.document_types, public.submissions, public.messages, public.announcements, public.announcement_reads, public.submission_history, public.conversation_threads, public.notifications from anon;
+grant select on public.profiles, public.document_types, public.submissions, public.messages, public.announcements, public.announcement_reads, public.submission_history, public.conversation_threads, public.notifications to authenticated;
+grant insert on public.document_types, public.submissions, public.messages, public.announcements, public.announcement_reads, public.submission_history, public.conversation_threads, public.notifications to authenticated;
+grant update on public.document_types, public.submissions, public.announcements, public.announcement_reads, public.conversation_threads to authenticated;
 grant update (read_at) on public.messages to authenticated;
 grant update (read_at) on public.notifications to authenticated;
 grant delete on public.document_types, public.submissions, public.messages, public.announcements to authenticated;
@@ -372,7 +394,7 @@ do $$
 declare
   table_name text;
 begin
-  foreach table_name in array array['profiles', 'document_types', 'submissions', 'messages', 'announcements', 'submission_history', 'conversation_threads', 'notifications']
+  foreach table_name in array array['profiles', 'document_types', 'submissions', 'messages', 'announcements', 'announcement_reads', 'submission_history', 'conversation_threads', 'notifications']
   loop
     if not exists (
       select 1 from pg_publication_tables
@@ -446,3 +468,4 @@ set role = 'admin', formation = null, is_support = true
 from auth.users as u
 where p.id = u.id
   and lower(u.email) = 'tbsngroupe@gmail.com';
+
