@@ -15,10 +15,12 @@
   var allMessages = [];
   var announcements = [];
   var announcementReads = [];
+  var allAnnouncementReads = [];
   var submissionHistory = [];
   var conversationThreads = [];
   var notifications = [];
   var selectedAdminStudent = null;
+  var selectedStudentIds = new Set();
   var currentPreviewUrl = null;
   var liveChannel = null;
   var currentFilter = "all";
@@ -489,14 +491,20 @@
   }
 
   async function loadAnnouncements() {
-    var results = await Promise.all([
+    var queries = [
       client.from("announcements").select("*").order("published_at", {ascending:false}),
       client.from("announcement_reads").select("announcement_id,read_at").eq("user_id", session.user.id)
-    ]);
+    ];
+    if (profile.role === "admin") queries.push(client.from("announcement_reads").select("announcement_id,user_id,read_at"));
+    var results = await Promise.all(queries);
     if (results[0].error) return showToast(friendlyError(results[0].error), true);
     announcements = results[0].data || [];
     announcementReads = results[1].error ? [] : (results[1].data || []);
+    allAnnouncementReads = profile.role === "admin" && results[2] && !results[2].error ? (results[2].data || []) : [];
     renderAnnouncements();
+  }
+  function announcementAudience(announcement) {
+    return adminStudents.filter(function (student) { return !announcement.formation || student.formation === announcement.formation; });
   }
   function renderAnnouncements() {
     var list = $("#announcement-list");
@@ -504,7 +512,12 @@
       var isRead = announcementReads.some(function (read) { return read.announcement_id === announcement.id; });
       var deleteButton = profile.role === "admin" ? '<button class="announcement-delete" data-delete-announcement="' + announcement.id + '">Supprimer</button>' : "";
       var readControl = isRead ? '<span class="announcement-read-state">✓ Lu</span>' : '<button class="announcement-read-button" type="button" data-read-announcement="' + announcement.id + '">Marquer comme lu</button>';
-      return '<article class="announcement-card ' + (isRead ? "read" : "unread") + '"><header><div><p class="eyebrow orange">Annonce ' + (isRead ? "" : '<span class="announcement-unread-label">Non lue</span>') + '</p><h2>' + escapeHtml(announcement.title) + '</h2></div><time>' + formatDateTime(announcement.published_at) + '</time></header><p>' + escapeHtml(announcement.content) + '</p><footer><span class="announcement-target">' + escapeHtml(announcement.formation || "Tous les apprenants") + '</span><div>' + readControl + deleteButton + '</div></footer></article>';
+      var audience = profile.role === "admin" ? announcementAudience(announcement) : [];
+      var audienceIds = audience.map(function (student) { return student.id; });
+      var readCount = profile.role === "admin" ? allAnnouncementReads.filter(function (read) { return read.announcement_id === announcement.id && audienceIds.includes(read.user_id); }).length : 0;
+      var readPercent = audience.length ? Math.round(readCount / audience.length * 100) : 0;
+      var readStats = profile.role === "admin" ? '<div class="announcement-read-stats"><div><strong>' + readCount + ' sur ' + audience.length + ' élèves ont lu</strong><span>' + readPercent + ' %</span></div><span class="announcement-read-track"><i style="width:' + readPercent + '%"></i></span></div>' : "";
+      return '<article class="announcement-card ' + (isRead ? "read" : "unread") + '"><header><div><p class="eyebrow orange">Annonce ' + (isRead ? "" : '<span class="announcement-unread-label">Non lue</span>') + '</p><h2>' + escapeHtml(announcement.title) + '</h2></div><time>' + formatDateTime(announcement.published_at) + '</time></header><p>' + escapeHtml(announcement.content) + '</p>' + readStats + '<footer><span class="announcement-target">' + escapeHtml(announcement.formation || "Tous les apprenants") + '</span><div>' + readControl + deleteButton + '</div></footer></article>';
     }).join("");
     var unreadCount = announcements.filter(function (announcement) { return !announcementReads.some(function (read) { return read.announcement_id === announcement.id; }); }).length;
     $("#announcements-empty").hidden = announcements.length > 0;
@@ -618,7 +631,9 @@
     var formations = Array.from(new Set(adminStudents.map(function (student) { return student.formation; }).filter(Boolean))).sort();
     formationSelect.innerHTML = '<option value="">Toutes les formations</option>' + formations.map(function (formation) { return '<option>' + escapeHtml(formation) + '</option>'; }).join("");
     if (formations.includes(previousFormation)) formationSelect.value = previousFormation;
+    selectedStudentIds = new Set(Array.from(selectedStudentIds).filter(function (id) { return adminStudents.some(function (student) { return student.id === id; }); }));
     renderAdmin();
+    renderAnnouncements();
   }
   function studentSummary(student) {
     var required = documentTypes.filter(function (type) { return type.active && (!type.formation || type.formation === student.formation); });
@@ -628,26 +643,66 @@
     var total = required.length;
     var percent = total ? Math.round((submitted / total) * 100) : 0;
     var stateKey = total === 0 ? "empty" : approved === total ? "complete" : submitted === total ? "review" : submitted === 0 ? "empty" : "progress";
-    return {required:required, submissions:studentItems, submitted:submitted, approved:approved, total:total, percent:percent, stateKey:stateKey, state:stateKey === "complete" ? "Complet" : stateKey === "review" ? "À vérifier" : stateKey === "progress" ? "En cours" : total ? "Non commencé" : "Aucune demande", stateClass:stateKey === "complete" ? "approved" : stateKey === "review" ? "submitted" : "missing"};
+    var overdue = required.some(function (type) {
+      if (!type.deadline || new Date(type.deadline + "T23:59:59") >= new Date()) return false;
+      var item = studentItems.find(function (submission) { return submission.document_type_id === type.id; });
+      return !item || item.status === "rejected";
+    });
+    return {required:required, submissions:studentItems, submitted:submitted, approved:approved, total:total, percent:percent, stateKey:stateKey, overdue:overdue, state:stateKey === "complete" ? "Complet" : stateKey === "review" ? "À vérifier" : stateKey === "progress" ? "En cours" : total ? "Non commencé" : "Aucune demande", stateClass:stateKey === "complete" ? "approved" : stateKey === "review" ? "submitted" : "missing"};
   }
-  function renderAdmin() {
-    var all = adminSubmissions;
+  function matchesAdminFilters(student) {
     var search = ($("#admin-search").value || "").toLowerCase();
     var formationFilter = $("#admin-formation-filter").value;
     var stateFilter = $("#admin-state-filter").value;
-    $("#admin-approved").textContent = all.filter(function (i) { return i.status === "approved"; }).length;
+    var summary = studentSummary(student);
+    var matchesSearch = student.full_name.toLowerCase().includes(search) || (student.student_number || "").toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
+    var matchesState = !stateFilter || (stateFilter === "overdue" ? summary.overdue : stateFilter === "incomplete" ? summary.total > 0 && summary.stateKey !== "complete" : summary.stateKey === stateFilter);
+    return matchesSearch && (!formationFilter || student.formation === formationFilter) && matchesState;
+  }
+  function renderAdminPriorities(summaries) {
+    var cards = [
+      {key:"review", icon:"◷", count:adminSubmissions.filter(function (item) { return item.status === "submitted"; }).length, title:"Pièces à vérifier", detail:"Valider ou demander une correction"},
+      {key:"incomplete", icon:"▤", count:summaries.filter(function (item) { return item.summary.total > 0 && item.summary.stateKey !== "complete"; }).length, title:"Dossiers incomplets", detail:"Sélectionner les élèves à relancer"},
+      {key:"overdue", icon:"⌛", count:summaries.filter(function (item) { return item.summary.overdue; }).length, title:"Échéances dépassées", detail:"Afficher les dossiers en retard"},
+      {key:"messages", icon:"✉", count:allMessages.filter(function (message) { return message.recipient_id === session.user.id && !message.read_at; }).length, title:"Messages non lus", detail:"Ouvrir le support administratif"}
+    ];
+    $("#admin-priority-grid").innerHTML = cards.map(function (card) {
+      return '<button class="priority-card" type="button" data-admin-priority="' + card.key + '"><span aria-hidden="true">' + card.icon + '</span><div><strong>' + card.count + ' · ' + card.title + '</strong><small>' + card.detail + '</small></div><b aria-hidden="true">→</b></button>';
+    }).join("");
+    $$('[data-admin-priority]').forEach(function (button) { button.onclick = function () { openAdminPriority(button.dataset.adminPriority); }; });
+  }
+  function openAdminPriority(priority) {
+    if (priority === "messages") return navigate("messages");
+    $("#admin-state-filter").value = priority;
+    renderAdmin();
+    $(".admin-toolbar").scrollIntoView({behavior:"smooth", block:"start"});
+  }
+  function updateStudentSelectionUI(visibleStudents) {
+    var selectedCount = selectedStudentIds.size;
+    var selectedVisible = visibleStudents.filter(function (student) { return selectedStudentIds.has(student.id); }).length;
+    var selectAll = $("#select-visible-students");
+    selectAll.checked = visibleStudents.length > 0 && selectedVisible === visibleStudents.length;
+    selectAll.indeterminate = selectedVisible > 0 && selectedVisible < visibleStudents.length;
+    $("#student-selection-summary").textContent = selectedCount ? selectedCount + " élève" + (selectedCount > 1 ? "s sélectionnés" : " sélectionné") + " pour une relance." : "Sélectionnez les élèves à relancer.";
+    var reminderButton = $("#bulk-reminder-button");
+    reminderButton.disabled = selectedCount === 0;
+    reminderButton.textContent = selectedCount ? "Relancer la sélection (" + selectedCount + ")" : "Relancer la sélection";
+  }
+  function renderAdmin() {
+    var all = adminSubmissions;
+    var summaries = adminStudents.map(function (student) { return {student:student, summary:studentSummary(student)}; });
+    $("#admin-total-students").textContent = adminStudents.length;
+    $("#admin-incomplete").textContent = summaries.filter(function (item) { return item.summary.total > 0 && item.summary.stateKey !== "complete"; }).length;
     $("#admin-review").textContent = all.filter(function (i) { return i.status === "submitted"; }).length;
-    $("#admin-types").textContent = adminDocumentTypes.filter(function (type) { return type.active; }).length;
+    $("#admin-overdue").textContent = summaries.filter(function (item) { return item.summary.overdue; }).length;
+    renderAdminPriorities(summaries);
     renderAdminRequests();
-    var visibleStudents = adminStudents.filter(function (student) {
-      var matchesSearch = student.full_name.toLowerCase().includes(search) || (student.student_number || "").toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
-      return matchesSearch && (!formationFilter || student.formation === formationFilter) && (!stateFilter || studentSummary(student).stateKey === stateFilter);
-    });
+    var visibleStudents = adminStudents.filter(matchesAdminFilters);
     var visibleIds = visibleStudents.map(function (student) { return student.id; });
     var filtered = all.filter(function (item) { return visibleIds.includes(item.user_id); });
     $("#admin-students").innerHTML = visibleStudents.map(function (student) {
       var summary = studentSummary(student);
-      return '<tr><td data-label="Élève"><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td data-label="Formation">' + escapeHtml(student.formation || "Non renseignée") + '</td><td data-label="Dossier"><div class="progress-track"><i style="width:' + summary.percent + '%"></i></div><span class="progress-label">' + summary.submitted + ' sur ' + summary.total + ' transmis · ' + summary.percent + ' %</span></td><td data-label="Validés">' + summary.approved + ' sur ' + summary.total + '</td><td data-label="État"><span class="status ' + summary.stateClass + '">' + summary.state + '</span></td><td data-label="Action"><button class="action" data-open-student="' + student.id + '" aria-label="Ouvrir le dossier de ' + escapeHtml(student.full_name) + '">Ouvrir</button></td></tr>';
+      return '<tr><td data-label="Sélection" class="select-column"><input type="checkbox" data-select-student="' + student.id + '" aria-label="Sélectionner ' + escapeHtml(student.full_name) + '" ' + (selectedStudentIds.has(student.id) ? "checked" : "") + '></td><td data-label="Élève"><strong>' + escapeHtml(student.full_name) + '</strong><small>' + escapeHtml(student.student_number || "Sans numéro") + '</small></td><td data-label="Formation">' + escapeHtml(student.formation || "Non renseignée") + '</td><td data-label="Dossier"><div class="progress-track"><i style="width:' + summary.percent + '%"></i></div><span class="progress-label">' + summary.submitted + ' sur ' + summary.total + ' transmis · ' + summary.percent + ' %</span></td><td data-label="Validés">' + summary.approved + ' sur ' + summary.total + '</td><td data-label="État"><span class="status ' + summary.stateClass + '">' + summary.state + (summary.overdue ? " · En retard" : "") + '</span></td><td data-label="Action"><button class="action" data-open-student="' + student.id + '" aria-label="Ouvrir le dossier de ' + escapeHtml(student.full_name) + '">Ouvrir</button></td></tr>';
     }).join("");
     $("#admin-students-empty").hidden = visibleStudents.length > 0;
     $("#admin-submissions").innerHTML = filtered.map(function (item) {
@@ -664,6 +719,8 @@
     $$("[data-admin-reject]").forEach(function (b) { b.onclick = function () { reviewSubmission(b.dataset.adminReject, "rejected"); }; });
     $$("[data-admin-delete]").forEach(function (b) { b.onclick = function () { adminDeleteSubmission(b.dataset.adminDelete, b); }; });
     $$("[data-open-student]").forEach(function (b) { b.onclick = function () { openStudentSheet(b.dataset.openStudent); }; });
+    $$("[data-select-student]").forEach(function (checkbox) { checkbox.onchange = function () { if (checkbox.checked) selectedStudentIds.add(checkbox.dataset.selectStudent); else selectedStudentIds.delete(checkbox.dataset.selectStudent); updateStudentSelectionUI(visibleStudents); }; });
+    updateStudentSelectionUI(visibleStudents);
   }
   function renderAdminRequests() {
     var body = $("#admin-requests");
@@ -715,19 +772,16 @@
     showToast("Rappel ajouté à l'espace de l'élève. L'e-mail sera disponible après configuration d'un prestataire.");
   }
   async function sendBulkReminders() {
-    var search = ($("#admin-search").value || "").toLowerCase();
-    var formation = $("#admin-formation-filter").value;
-    var state = $("#admin-state-filter").value;
-    var targets = adminStudents.filter(function (student) {
-      var matches = student.full_name.toLowerCase().includes(search) || (student.student_number || "").toLowerCase().includes(search) || (student.formation || "").toLowerCase().includes(search);
-      return matches && (!formation || student.formation === formation) && (!state || studentSummary(student).stateKey === state) && studentSummary(student).stateKey !== "complete";
-    });
-    if (!targets.length) return showToast("Aucun dossier incomplet dans la sélection.", true);
-    if (!window.confirm("Envoyer un rappel aux " + targets.length + " élèves affichés dont le dossier est incomplet ?")) return;
+    var targets = adminStudents.filter(function (student) { return selectedStudentIds.has(student.id) && studentSummary(student).stateKey !== "complete"; });
+    var skipped = selectedStudentIds.size - targets.length;
+    if (!targets.length) return showToast("La sélection ne contient aucun dossier incomplet.", true);
+    if (!window.confirm("Envoyer un rappel à " + targets.length + " élève" + (targets.length > 1 ? "s" : "") + " ?" + (skipped ? " " + skipped + " dossier(s) complet(s) seront ignorés." : ""))) return;
     var rows = targets.map(function (student) { var summary = studentSummary(student); return {user_id:student.id, title:"Rappel du secrétariat", content:"Votre dossier administratif est incomplet : " + summary.submitted + " document(s) transmis sur " + summary.total + ".", link_view:"documents", email_requested:true, email_status:"not_configured", created_by:session.user.id}; });
     var result = await client.from("notifications").insert(rows);
     if (result.error) return showToast(friendlyError(result.error), true);
-    showToast(targets.length + " rappels ajoutés aux espaces élèves.");
+    selectedStudentIds.clear();
+    renderAdmin();
+    showToast(targets.length + " rappel" + (targets.length > 1 ? "s ajoutés" : " ajouté") + " aux espaces élèves.");
   }
   function exportStudentsCsv() {
     var rows = [["Nom", "Numéro apprenant", "Formation", "Documents transmis", "Documents validés", "Total demandé", "État"]];
@@ -865,7 +919,7 @@
       .on("postgres_changes", {event:"*", schema:"public", table:"document_types"}, function () {
         loadDocuments().then(function () { if (profile.role === "admin") loadAdmin(); });
       })
-      .on("postgres_changes", {event:"*", schema:"public", table:"messages"}, function () { loadMessages(); })
+      .on("postgres_changes", {event:"*", schema:"public", table:"messages"}, function () { loadMessages().then(function () { if (profile.role === "admin") renderAdmin(); }); })
       .on("postgres_changes", {event:"*", schema:"public", table:"announcements"}, function () { loadAnnouncements(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"announcement_reads"}, function () { loadAnnouncements(); })
       .on("postgres_changes", {event:"*", schema:"public", table:"conversation_threads"}, function () { loadMessages(); })
@@ -921,6 +975,12 @@
   $("#admin-search").addEventListener("input", renderAdmin);
   $("#admin-formation-filter").addEventListener("change", renderAdmin);
   $("#admin-state-filter").addEventListener("change", renderAdmin);
+  $("#select-visible-students").addEventListener("change", function () {
+    var visibleStudents = adminStudents.filter(matchesAdminFilters);
+    var checked = this.checked;
+    visibleStudents.forEach(function (student) { if (checked) selectedStudentIds.add(student.id); else selectedStudentIds.delete(student.id); });
+    renderAdmin();
+  });
   $("#export-students-button").addEventListener("click", exportStudentsCsv);
   $("#bulk-reminder-button").addEventListener("click", sendBulkReminders);
   $("#student-reminder-button").addEventListener("click", sendStudentReminder);

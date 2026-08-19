@@ -368,7 +368,7 @@ using ((select public.is_admin()));
 
 drop policy if exists "announcement_reads_select_own" on public.announcement_reads;
 create policy "announcement_reads_select_own" on public.announcement_reads for select to authenticated
-using (user_id = (select auth.uid()));
+using (user_id = (select auth.uid()) or (select public.is_admin()));
 
 drop policy if exists "announcement_reads_insert_own" on public.announcement_reads;
 create policy "announcement_reads_insert_own" on public.announcement_reads for insert to authenticated
