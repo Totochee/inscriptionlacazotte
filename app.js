@@ -26,6 +26,7 @@
   var currentFilter = "all";
   var toastTimer;
   var lastFocusedElement = null;
+  var enteringApp = false;
 
   var $ = function (selector, root) { return (root || document).querySelector(selector); };
   var $$ = function (selector, root) { return Array.from((root || document).querySelectorAll(selector)); };
@@ -90,6 +91,9 @@
     client.auth.onAuthStateChange(function (event, nextSession) {
       session = nextSession;
       if (event === "SIGNED_OUT") showAuth();
+      if (event === "SIGNED_IN" && session) setTimeout(function () {
+        if ($("#app").hidden) enterApp().catch(function (error) { authMessage(friendlyError(error), false); });
+      }, 0);
       if (event === "PASSWORD_RECOVERY") setTimeout(async function () {
         if (session) {
           await enterApp();
@@ -129,22 +133,29 @@
   }
 
   async function enterApp() {
-    var result = await client.from("profiles").select("*").eq("id", session.user.id).single();
-    if (result.error) {
-      authMessage("Votre profil n'a pas pu être chargé. Vérifiez que le fichier SQL a bien été exécuté.", false);
-      await client.auth.signOut();
-      return;
+    if (enteringApp || !session) return;
+    enteringApp = true;
+    try {
+      var result = await client.from("profiles").select("*").eq("id", session.user.id).single();
+      if (result.error) {
+        authMessage("Votre profil n'a pas pu être chargé. Vérifiez que le fichier SQL a bien été exécuté.", false);
+        await client.auth.signOut();
+        return;
+      }
+      profile = result.data;
+      $("#auth-screen").hidden = true;
+      $("#setup-screen").hidden = true;
+      $("#app").hidden = false;
+      fillIdentity();
+      var requestedView = location.hash.slice(1);
+      if (profile.role === "admin" && (!requestedView || requestedView === "dashboard" || requestedView === "documents")) requestedView = "admin";
+      navigate(requestedView || "dashboard");
+      await Promise.all([loadDocuments(), loadMessages(), loadAnnouncements(), loadNotifications()]);
+      if (profile.role === "admin") await loadAdmin();
+      setupRealtime();
+    } finally {
+      enteringApp = false;
     }
-    profile = result.data;
-    $("#auth-screen").hidden = true;
-    $("#app").hidden = false;
-    fillIdentity();
-    await Promise.all([loadDocuments(), loadMessages(), loadAnnouncements(), loadNotifications()]);
-    if (profile.role === "admin") await loadAdmin();
-    setupRealtime();
-    var requestedView = location.hash.slice(1);
-    if (profile.role === "admin" && (!requestedView || requestedView === "dashboard" || requestedView === "documents")) requestedView = "admin";
-    navigate(requestedView || "dashboard");
   }
 
   function fillIdentity() {
@@ -943,11 +954,19 @@
   $$(".auth-tabs button, [data-auth-tab]").forEach(function (button) { button.addEventListener("click", function () { switchAuth(button.dataset.authTab); }); });
   $("#forgot-button").addEventListener("click", function () { switchAuth("reset"); });
   $("#login-form").addEventListener("submit", async function (event) {
-    event.preventDefault(); setBusy(event.currentTarget, true);
-    var result = await client.auth.signInWithPassword({email:event.currentTarget.elements.email.value, password:event.currentTarget.elements.password.value});
-    setBusy(event.currentTarget, false);
-    if (result.error) return authMessage(friendlyError(result.error), false);
-    session = result.data.session; await enterApp();
+    event.preventDefault();
+    var form = event.currentTarget;
+    setBusy(form, true);
+    try {
+      var result = await client.auth.signInWithPassword({email:form.elements.email.value, password:form.elements.password.value});
+      if (result.error) return authMessage(friendlyError(result.error), false);
+      session = result.data.session;
+      await enterApp();
+    } catch (error) {
+      authMessage(friendlyError(error), false);
+    } finally {
+      setBusy(form, false);
+    }
   });
   $("#signup-form").addEventListener("submit", async function (event) {
     event.preventDefault(); setBusy(event.currentTarget, true); var form = event.currentTarget;
