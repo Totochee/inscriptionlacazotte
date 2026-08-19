@@ -75,7 +75,7 @@
 
         <section class="view" id="view-messages">
           <div class="page-head"><div><p class="eyebrow green">Conversation privée</p><h1>Support administratif</h1><p class="student-only">Posez vos questions au compte support de l’établissement.</p><p class="admin-only" hidden>Sélectionnez un élève pour consulter sa conversation et lui répondre.</p></div></div>
-          <section class="panel messaging"><div class="conversation-toolbar"><label>Conversation avec<select id="message-recipient" aria-label="Destinataire" required><option value="">Choisir le destinataire</option></select></label><div class="conversation-state"><span class="thread-status" id="thread-status">Conversation ouverte</span><button class="action admin-only" id="toggle-thread-button" type="button" hidden>Clôturer</button><span class="live-indicator"><i></i> Temps réel</span></div></div><div class="message-history" id="message-history"><div class="empty"><span>✉</span><h3>Aucun message</h3><p>La conversation apparaîtra ici.</p></div></div><form id="message-form" class="compose"><textarea id="message-content" aria-label="Message" required maxlength="2000" placeholder="Écrivez votre message…"></textarea><button class="primary" type="submit">Envoyer</button><p class="recipient-hint" id="message-recipient-hint" hidden></p></form></section>
+          <section class="panel messaging"><div class="conversation-toolbar"><label>Conversation avec<select id="message-recipient" aria-label="Destinataire" required><option value="">Choisir le destinataire</option></select></label><div class="conversation-state"><span class="thread-status" id="thread-status">Conversation ouverte</span><button class="action admin-only" id="toggle-thread-button" type="button" hidden>Clôturer</button><span class="live-indicator"><i></i> Temps réel</span></div></div><div class="message-history" id="message-history"><div class="empty"><span>✉</span><h3>Aucun message</h3><p>La conversation apparaîtra ici.</p></div></div><form id="message-form" class="compose"><textarea id="message-content" aria-label="Message" aria-describedby="message-keyboard-hint" required maxlength="2000" placeholder="Écrivez votre message…"></textarea><button class="primary" type="submit">Envoyer</button><small class="compose-hint" id="message-keyboard-hint">Entrée pour envoyer · Maj + Entrée pour aller à la ligne</small><p class="recipient-hint" id="message-recipient-hint" hidden></p></form></section>
         </section>
 
         <section class="view" id="view-announcements">
@@ -112,7 +112,7 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=3"></script>
-  <script src="app.js?v=16"></script>
+  <script src="app.js?v=17"></script>
 </body>
 </html>
 

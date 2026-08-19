@@ -459,16 +459,26 @@
   }
   async function sendMessage(event) {
     event.preventDefault();
+    var form = event.currentTarget;
+    if (form.getAttribute("aria-busy") === "true") return;
     var recipient = $("#message-recipient").value;
-    var content = $("#message-content").value.trim();
+    var textarea = $("#message-content");
+    var originalContent = textarea.value;
+    var content = originalContent.trim();
     if (!recipient || !content) return;
-    setBusy(event.currentTarget, true);
+    textarea.value = "";
+    textarea.focus();
+    setBusy(form, true);
     var result = await client.from("messages").insert({sender_id:session.user.id, recipient_id:recipient, content:content});
-    setBusy(event.currentTarget, false);
-    if (result.error) return showToast(friendlyError(result.error), true);
-    $("#message-content").value = "";
+    setBusy(form, false);
+    if (result.error) {
+      if (!textarea.value) textarea.value = originalContent;
+      textarea.focus();
+      return showToast(friendlyError(result.error), true);
+    }
     showToast("Message envoyé.");
     await loadMessages();
+    textarea.focus();
   }
   async function deleteMessage(id) {
     if (profile.role !== "admin" || !window.confirm("Supprimer définitivement ce message ? Cette action est irréversible.")) return;
@@ -967,6 +977,14 @@
   $("#upload-file").addEventListener("change", function () { var file = this.files[0]; $("#upload-file-name").textContent = file ? file.name : "Sélectionner un fichier"; previewUploadFile(file); });
   $("#upload-form").addEventListener("submit", uploadDocument);
   $("#message-form").addEventListener("submit", sendMessage);
+  $("#message-content").addEventListener("keydown", function (event) {
+    if (event.key !== "Enter" || event.shiftKey || event.isComposing) return;
+    event.preventDefault();
+    var form = $("#message-form");
+    var submitButton = $("button[type=submit]", form);
+    if (this.disabled || submitButton.disabled || form.getAttribute("aria-busy") === "true" || !this.value.trim()) return;
+    form.requestSubmit(submitButton);
+  });
   $("#message-recipient").addEventListener("change", renderConversation);
   $("#toggle-thread-button").addEventListener("click", toggleConversationThread);
   $("#announcement-form").addEventListener("submit", createAnnouncement);
