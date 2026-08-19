@@ -41,11 +41,11 @@
   function firstName(name) { return (name || "").trim().split(/\s+/)[0] || ""; }
   function formatDate(value) {
     if (!value) return "Aucune échéance";
-    return new Intl.DateTimeFormat("fr-FR", {day:"numeric", month:"long", year:"numeric"}).format(new Date(value));
+    return new Intl.DateTimeFormat(window.CAZOTTE_I18N ? window.CAZOTTE_I18N.locale() : "fr-FR", {day:"numeric", month:"long", year:"numeric"}).format(new Date(value));
   }
   function formatDateTime(value) {
     if (!value) return "—";
-    return new Intl.DateTimeFormat("fr-FR", {day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"}).format(new Date(value));
+    return new Intl.DateTimeFormat(window.CAZOTTE_I18N ? window.CAZOTTE_I18N.locale() : "fr-FR", {day:"2-digit", month:"short", hour:"2-digit", minute:"2-digit"}).format(new Date(value));
   }
   function formatBytes(value) {
     if (!value) return "0 Ko";
@@ -155,7 +155,7 @@
     $("#side-role").textContent = profile.role === "admin" ? "Personnel habilité" : (profile.formation || "Apprenant");
     $("#side-initials").textContent = initials(name);
     $("#top-initials").textContent = initials(name);
-    $("#today").textContent = new Intl.DateTimeFormat("fr-FR", {weekday:"long", day:"numeric", month:"long", year:"numeric"}).format(new Date());
+    $("#today").textContent = new Intl.DateTimeFormat(window.CAZOTTE_I18N ? window.CAZOTTE_I18N.locale() : "fr-FR", {weekday:"long", day:"numeric", month:"long", year:"numeric"}).format(new Date());
     $$(".admin-only").forEach(function (element) { element.hidden = profile.role !== "admin"; });
     $$(".student-only").forEach(function (element) { element.hidden = profile.role === "admin"; });
     var form = $("#profile-form");

@@ -6,7 +6,8 @@
   <meta name="theme-color" content="#123d2d">
   <meta name="description" content="Portail administratif sécurisé de l'EPLEFPA La Cazotte.">
   <title>Mes documents · La Cazotte</title>
-  <link rel="stylesheet" href="styles.css?v=11">
+  <script>(function(){var t=localStorage.getItem("cazotte-theme")||"light";if(t==="system")t=matchMedia("(prefers-color-scheme: dark)").matches?"dark":"light";document.documentElement.dataset.theme=t;}());</script>
+  <link rel="stylesheet" href="styles.css?v=12">
   <link rel="stylesheet" href="password.css?v=8">
 </head>
 <body>
@@ -87,6 +88,7 @@
         <section class="view" id="view-profile">
           <div class="page-head"><div><p class="eyebrow green">Compte utilisateur</p><h1>Mon profil</h1><p>Mettez à jour les informations utiles au traitement de votre dossier.</p></div></div>
           <form class="panel profile-form" id="profile-form"><div class="two-fields"><label>Prénom et nom<input name="full_name" required></label><label>Numéro apprenant<input name="student_number" required></label></div><label>Formation<select name="formation" required><option>3e de l'enseignement agricole</option><option>Seconde générale et technologique</option><option>Bac technologique STAV</option><option>Bac Pro CGEH hippique</option><option>Bac Pro CGEA équin</option><option>Bac Pro CGEA ovin</option><option>BTSA Métiers de l'élevage</option><option>Formation CFA / CFPPA</option></select></label><label>Adresse e-mail<input id="profile-email" disabled></label><div class="form-actions"><button class="primary" type="submit">Enregistrer les modifications</button></div></form>
+          <section class="panel profile-form preference-panel" aria-labelledby="preferences-title"><div><p class="eyebrow">Affichage et langue</p><h2 id="preferences-title">Préférences de l’interface</h2><p>Ces choix sont enregistrés sur cet appareil.</p></div><div class="two-fields"><label>Apparence<select id="theme-select"><option value="light">Thème clair</option><option value="dark">Thème sombre</option><option value="system">Selon l’appareil</option></select></label><label>Langue<select id="language-select"><option value="fr">Français</option><option value="en">English</option><option value="es">Español</option></select></label></div></section>
           <form class="panel profile-form password-form" id="password-form"><div><p class="eyebrow">Sécurité</p><h2>Changer mon mot de passe</h2></div><label>Nouveau mot de passe<input type="password" name="password" minlength="8" autocomplete="new-password" required><small>8 caractères minimum</small></label><div class="form-actions"><button class="secondary" type="submit">Mettre à jour le mot de passe</button></div></form>
         </section>
 
@@ -112,7 +114,8 @@
 
   <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
   <script src="config.js?v=3"></script>
-  <script src="app.js?v=17"></script>
+  <script src="preferences.js?v=1"></script>
+  <script src="app.js?v=18"></script>
 </body>
 </html>
 

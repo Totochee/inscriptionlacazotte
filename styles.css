@@ -36,3 +36,20 @@
   .top-user .avatar{width:34px;height:34px}.toast{right:12px;bottom:12px;left:12px;width:auto;text-align:center;transform:translateY(25px)}.toast.show{transform:translateY(0)}
 }
 
+/* Thème sombre */
+html[data-theme="dark"]{color-scheme:dark;--ink:#edf2f7;--muted:#a8b3c1;--line:#364250;--bg:#0f151b;--white:#182129;--blue:#8392ff;--blue-dark:#6f7ee8;--blue-soft:#252e4d;--teal:#55c8b9;--teal-soft:#173a37;--orange:#f08a56;--orange-soft:#40291f;--red:#ff8b7e;--pale:#173a37;--dark:#e8edf5;--shadow:0 2px 10px rgba(0,0,0,.28)}
+html[data-theme="dark"] body,html[data-theme="dark"] .app,html[data-theme="dark"] .page,html[data-theme="dark"] .auth-screen,html[data-theme="dark"] .auth-panel{background:#0f151b;color:var(--ink)}
+html[data-theme="dark"] .sidebar,html[data-theme="dark"] .topbar,html[data-theme="dark"] .panel,html[data-theme="dark"] .hero,html[data-theme="dark"] .stats article,html[data-theme="dark"] .journey,html[data-theme="dark"] .setup-card,html[data-theme="dark"] .modal,html[data-theme="dark"] body .announcement-card,html[data-theme="dark"] .priority-card{background:#182129;color:var(--ink);border-color:var(--line)}
+html[data-theme="dark"] input,html[data-theme="dark"] select,html[data-theme="dark"] textarea,html[data-theme="dark"] .secondary,html[data-theme="dark"] .action,html[data-theme="dark"] .filter,html[data-theme="dark"] .menu{background:#111920;color:var(--ink);border-color:#4a5868}
+html[data-theme="dark"] input:disabled{background:#222b34;color:#a8b3c1}
+html[data-theme="dark"] .nav-item{color:#c1cad5}html[data-theme="dark"] .nav-item:hover{background:#202b35;color:#a8b3ff}html[data-theme="dark"] .nav-item.active{background:#252e4d;color:#a8b3ff}
+html[data-theme="dark"] .completion,html[data-theme="dark"] .file-preview,html[data-theme="dark"] .student-sheet-progress,html[data-theme="dark"] .message-history,html[data-theme="dark"] .drop,html[data-theme="dark"] .admin-toolbar,html[data-theme="dark"] .announcement-read-stats{background:#111920;border-color:var(--line)}
+html[data-theme="dark"] .message:not(.mine),html[data-theme="dark"] .student-documents article,html[data-theme="dark"] .admin-table-wrap tr{background:#182129;color:var(--ink);border-color:var(--line)}
+html[data-theme="dark"] th{background:#202a34;color:#bac4d0}html[data-theme="dark"] td{border-color:var(--line)}
+html[data-theme="dark"] .notice-list article{background:#2b211c;border-color:#65402f}html[data-theme="dark"] .journey li.active{background:#252e4d}
+html[data-theme="dark"] .doc-history,html[data-theme="dark"] .request-inactive{background:#151d25}html[data-theme="dark"] .timeline i{background:#182129}
+html[data-theme="dark"] body .announcement-card.read{background:#151d24}html[data-theme="dark"] body .announcement-card.unread{background:#202a32;border-color:#607080}
+html[data-theme="dark"] .announcement-read-track,html[data-theme="dark"] .completion-track,html[data-theme="dark"] .progress-track{background:#35414d}
+html[data-theme="dark"] .toast{background:#31406f}html[data-theme="dark"] .setup-screen{background:#0f151b}
+html[data-theme="dark"] .preference-panel>div>p:last-child{color:var(--muted)}
+
